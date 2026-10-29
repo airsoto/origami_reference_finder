@@ -53,5 +53,9 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    # La entrega a Apple es manual. Tras resolver la licencia y probar en iPhone,
-    # puedes añadir publishing.app_store_connect usando auth: integration.
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Subir la IPA para pruebas internas; la revisión beta externa es manual.
+        submit_to_testflight: false
+        submit_to_app_store: false
