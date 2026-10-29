@@ -55,7 +55,7 @@ for mode in ['Debug','Release']:
     if mode == 'Debug': common['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = 'DEBUG'
     project_configs.append(obj('project:'+mode, f'isa = XCBuildConfiguration; buildSettings = {settings(common)}; name = {mode};'))
     target = {'PRODUCT_NAME':quote('$(TARGET_NAME)'), 'PRODUCT_BUNDLE_IDENTIFIER':quote(os.environ.get('BUNDLE_ID', 'es.angelsoto.origamireferencefinder')),
-              'MARKETING_VERSION':'1.0', 'CURRENT_PROJECT_VERSION':'1', 'VERSIONING_SYSTEM':quote('apple-generic'),
+              'MARKETING_VERSION':'1.1', 'CURRENT_PROJECT_VERSION':'1', 'VERSIONING_SYSTEM':quote('apple-generic'),
               'INFOPLIST_FILE':quote('App/Info.plist'), 'GENERATE_INFOPLIST_FILE':'NO',
               'SWIFT_OBJC_BRIDGING_HEADER':quote('App/OrigamiReference-Bridging-Header.h'),
               'HEADER_SEARCH_PATHS':quote('$(SRCROOT)/Engine'),
@@ -69,7 +69,7 @@ def config_list(label, configs):
 target_list = config_list('target-configs', target_configs)
 project_list = config_list('project-configs', project_configs)
 target_id = obj('target', f'isa = PBXNativeTarget; buildConfigurationList = {target_list}; buildPhases = {arr([src_phase,frameworks,res_phase])}; buildRules = (); dependencies = (); name = OrigamiReference; productName = OrigamiReference; productReference = {product}; productType = "com.apple.product-type.application";')
-project = obj('project', f'isa = PBXProject; attributes = {{BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; }}; buildConfigurationList = {project_list}; compatibilityVersion = "Xcode 14.0"; developmentRegion = es; hasScannedForEncodings = 0; knownRegions = (es, en, Base); mainGroup = {main}; productRefGroup = {products}; projectDirPath = ""; projectRoot = ""; targets = {arr([target_id])};')
+project = obj('project', f'isa = PBXProject; attributes = {{BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; }}; buildConfigurationList = {project_list}; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = {main}; productRefGroup = {products}; projectDirPath = ""; projectRoot = ""; targets = {arr([target_id])};')
 dest = ROOT/'OrigamiReference.xcodeproj'
 dest.mkdir(exist_ok=True)
 body = '\n'.join(f'{key} = {{ {value} }};' for key,value in objects.items())

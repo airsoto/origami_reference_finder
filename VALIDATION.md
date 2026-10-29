@@ -1,34 +1,19 @@
-# Verificación de entrega · 29 de octubre de 2026
+# Version 1.1 validation — October 29, 2026
 
-## Ejecutado
+## Completed locally
 
-- Compilación real de los seis archivos originales del motor y del adaptador
-  nuevo con g++ y C++17, sin recurrir a -fpermissive.
-- 17 casos de búsqueda en el mismo proceso: coordenadas exactas de tercios,
-  referencia de borde, recta de tercios, esquina, raíz y coma decimal,
-  coincidencia de los puntos de una recta, coordenada fuera del papel,
-  división por cero, raíz negativa, set rechazado, identificador desconocido,
-  papel rectangular, rango 2, rango 3, reconstrucción del rango 4,
-  rango no admitido y papel no válido.
-- Validación de cada SVG generado como XML; ausencia de valores nan/inf.
-- Verificación del error prácticamente nulo de las construcciones exactas
-  (tolerancia 1e-8) y del límite de rango solicitado.
-- Lectura de codemagic.yaml y de ambos property lists; esquema compartido
-  de Xcode verificado como XML.
-- En una ejecución local, (1/3, 1/3) con rango máximo 4 produjo 16 325 puntos
-  y 20 564 rectas. Mejor solución: rango 3, tres diagramas y error
-  7.85046229342e-17. Esta medida no predice el rendimiento de un iPhone.
+- C++17 build of the engine and mobile SVG adapter.
+- All 17 existing regression cases pass, including exact thirds, line references, invalid expressions, rectangular paper, rank changes and database rebuilds.
+- Every generated diagram parsed as XML and checked for non-finite values.
+- Representative folding diagrams rendered with MuPDF and visually inspected for contrast and label legibility.
+- Xcode project regenerated with version 1.1 and English development language.
+- Property lists, shared scheme XML, YAML and source checksums validated.
 
-## Pendiente en macOS / Codemagic
+## Requires Codemagic / iPhone
 
-- Compilar las fuentes SwiftUI, Objective-C++ y recursos con el SDK de Apple.
-  No hay Xcode, simulador ni swiftc disponibles en el entorno Linux de entrega.
-  Ejecutar primero el flujo ios-check incluido.
-- Prueba de uso en simulador y dispositivo: teclado, navegación por diagramas,
-  accesibilidad, Dynamic Type, rotación, cancelar e historial.
-- Firmar con los certificados/perfiles de la cuenta del usuario y comprobar IPA.
-- Resolver las condiciones de distribución de GPLv2 antes de entregar a Apple.
+- Compile the refreshed SwiftUI interface against the Apple SDK with ios-check. Xcode and swiftc are not installed in this Linux workspace.
+- Check numeric and math keyboards, X/Y swapping, paper taps, fractions, rectangle sizing, small screens, landscape and Dynamic Type.
+- Check step navigation, expansion, zoom/pan, cancellation, repeated-search caching, sharing and retained history.
+- Run ios-release for signing and upload to TestFlight. This update did not trigger a build or submit an App Store review.
 
-No se ha ejecutado un build en Codemagic, no se ha generado una IPA y no se ha
-subido nada a GitHub, TestFlight ni App Store. El entregable es el proyecto fuente
-con su configuración de compilación y las pruebas ejecutables.
+Earlier version 1.0 compiled and signed successfully in the user's Codemagic account; that does not validate the new SwiftUI changes.

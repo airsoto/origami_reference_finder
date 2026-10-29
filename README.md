@@ -1,3 +1,20 @@
+# Version 1.1 — visual refresh
+
+- Entire app interface, help, errors, and sharing text in English.
+- Touch the paper to place the first reference point; exact X/Y fields remain available.
+- Side-by-side coordinate cards, fraction presets, swap X/Y, numeric keyboard with math shortcuts, and optional math keyboard.
+- Larger, contrasting reference markers and fold strokes; labels have white backgrounds.
+- Expandable diagrams, 2× zoom with panning, direct step selection, and a concise visual legend.
+- Balanced rank-3 default reduces initial database work; rank 2 and 4 remain available.
+- Eight recent successful results cached in memory; existing local search history retained.
+- Version 1.1; existing signing and App Store Connect upload workflow preserved.
+
+Run `ios-check` to validate the new SwiftUI interface on Apple's SDK. Then run `ios-release` and test via TestFlight. No build was started automatically by this update.
+
+The live paper preview supports decimal values, simple fractions, and sqrt(2) expressions. Other expressions are calculated by the original engine when searching. Tapping the paper sets coordinates to three decimal places; use the fields for exact fractions.
+
+---
+
 # Origami Reference Finder para iPhone y iPad
 
 Nueva interfaz iOS para el motor original ReferenceFinder 4 de Robert J. Lang.
@@ -60,12 +77,12 @@ No hay licencia explícita en la raíz revisada. No se reutilizó su código.
    El número de build usa BUILD_NUMBER_BASE + PROJECT_BUILD_NUMBER. Si ya tienes
    builds con un número mayor, sube BUILD_NUMBER_BASE antes de compilar.
 6. Revisa y resuelve la licencia de distribución antes de entregar a Apple.
-   El flujo no publica ni sube automáticamente a App Store Connect.
+   El flujo ios-release sube automáticamente a App Store Connect, sin enviar a revisión pública.
 7. Prueba la app en un iPhone real: entrada y teclado, cancelar, rotación, modo
    oscuro, tamaño de texto, navegación por pasos y hoja de compartir. Después
    podrás subir la IPA a App Store Connect con tu procedimiento habitual.
 
-No se han configurado tu Team ID, credenciales, perfiles ni integración real:
+La integración existente de Codemagic está referenciada por nombre; las claves y perfiles permanecen en tu cuenta:
 son propios de tu cuenta y no deben incluirse en el repositorio.
 
 ## Licencia antes de publicar

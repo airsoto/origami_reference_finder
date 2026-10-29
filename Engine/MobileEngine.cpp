@@ -45,13 +45,13 @@ std::string xml(const std::string& s) {
 }
 double evaluate(std::string value) {
   if(value.size() > 120 || value.find("set") != std::string::npos ||
-     value.find('"') != std::string::npos) throw std::runtime_error("Expresión no admitida.");
+     value.find('"') != std::string::npos) throw std::runtime_error("Unsupported expression.");
   std::replace(value.begin(), value.end(), ',', '.');
   Parser parser; double result = 0;
   const auto status = parser.evaluate(value, result);
   auto check = status;
   if(!check.isOK() || !std::isfinite(result))
-    throw std::runtime_error("Expresión inválida: " + value + ". Usa, por ejemplo, 1/3 o sqrt(2)/2.");
+    throw std::runtime_error("Invalid expression: " + value + ". Try 1/3 or sqrt(2)/2.");
   return result;
 }
 void databaseProgress(ReferenceFinder::DatabaseInfo, void*, bool& stop) {
@@ -63,25 +63,26 @@ void databaseProgress(ReferenceFinder::DatabaseInfo, void*, bool& stop) {
 class SVG : public RefDgmr {
   std::ostringstream out;
   double height;
-  static const char* color(int s) { return s == 0 ? "#64748b" : s == 1 ? "#2563eb" : "#dc4b32"; }
+  double unit;
+  static const char* color(int s) { return s == 0 ? "#64748b" : s == 1 ? "#007c91" : "#e14b32"; }
   std::string stroke(LineStyle s) {
     std::ostringstream o;
-    o << " fill=\"none\" stroke=\"" << (s == LINESTYLE_HILITE ? "#2563eb" :
-       (s == LINESTYLE_VALLEY || s == LINESTYLE_MOUNTAIN ? "#dc4b32" : "#334155"))
-      << "\" stroke-width=\"" << (s == LINESTYLE_CREASE ? .002 : .004) << "\"";
+    o << " fill=\"none\" stroke=\"" << (s == LINESTYLE_HILITE ? "#007c91" :
+       (s == LINESTYLE_VALLEY || s == LINESTYLE_MOUNTAIN ? "#e14b32" : "#334155"))
+      << "\" stroke-width=\"" << (s == LINESTYLE_CREASE ? .0025*unit : .006*unit) << "\"";
     if(s == LINESTYLE_CREASE) o << " stroke-opacity=\"0.55\"";
     if(s == LINESTYLE_VALLEY) o << " stroke-dasharray=\".02 .012\"";
     if(s == LINESTYLE_MOUNTAIN) o << " stroke-dasharray=\".025 .008 .006 .008\"";
     return o.str();
   }
 public:
-  SVG(double width, double h) : height(h) {
+  SVG(double width, double h) : height(h), unit(std::min(width, h)) {
     out << std::setprecision(9) << "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-.12 -.12 "
         << width+.24 << ' ' << h+.24 << "\" width=\"100%\" height=\"100%\">";
   }
   void DrawPt(const XYPt& p, PointStyle s) override {
     out << "<circle cx=\"" << p.x << "\" cy=\"" << height-p.y
-        << "\" r=\".008\" fill=\"" << color(s) << "\"/>";
+        << "\" r=\"" << (s == POINTSTYLE_NORMAL ? .008 : .014)*unit << "\" stroke=\"white\" stroke-width=\"" << .003*unit << "\" fill=\"" << color(s) << "\"/>";
   }
   void DrawLine(const XYPt& a, const XYPt& b, LineStyle s) override {
     out << "<path d=\"M " << a.x << ' ' << height-a.y << " L " << b.x << ' ' << height-b.y << '"' << stroke(s) << "/>";
@@ -106,8 +107,13 @@ public:
         << "\" stroke=\"#334155\" stroke-width=\".002\"/>";
   }
   void DrawLabel(const XYPt& p, const std::string& label, LabelStyle s) override {
-    out << "<text x=\"" << p.x+.012 << "\" y=\"" << height-p.y-.012
-        << "\" font-family=\"system-ui,sans-serif\" font-size=\".038\" fill=\"" << color(s) << "\">" << xml(label) << "</text>";
+    const double x = p.x + .014*unit, y = height-p.y-.014*unit;
+    out << "<rect x=\"" << x-.007*unit << "\" y=\"" << y-.040*unit
+        << "\" width=\"" << (.030*label.size()+.014)*unit << "\" height=\"" << .052*unit
+        << "\" rx=\"" << .006*unit << "\" fill=\"white\" fill-opacity=\"0.94\"/>";
+    out << "<text x=\"" << x << "\" y=\"" << y
+        << "\" font-family=\"Helvetica,Arial,sans-serif\" font-weight=\"700\" font-size=\"" << .044*unit
+        << "\" fill=\"" << color(s) << "\">" << xml(label) << "</text>";
   }
   std::string finish() { return out.str() + "</svg>"; }
 };
@@ -117,7 +123,7 @@ std::string solutions(std::vector<R*>& refs, const Target& target, double width,
   std::ostringstream o; o << std::setprecision(12) << '[';
   bool first = true;
   for(auto* ref : refs) {
-    if(cancelled) throw std::runtime_error("Búsqueda cancelada.");
+    if(cancelled) throw std::runtime_error("Search cancelled.");
     if(!first) o << ','; first = false;
     std::ostringstream instructions;
     ref->PutHowtoSequence(instructions);
@@ -144,16 +150,16 @@ std::string solve(const Request& r) {
     const double width = evaluate(r.width), height = evaluate(r.height);
     if(width < .25 || width > 2 || height < .25 || height > 2 ||
        std::max(width,height)/std::min(width,height) > 4)
-      throw std::runtime_error("Usa dimensiones entre 0.25 y 2 y una proporción máxima de 4:1.");
-    if(r.rank < 2 || r.rank > 4) throw std::runtime_error("El rango debe estar entre 2 y 4.");
+      throw std::runtime_error("Use paper dimensions from 0.25 to 2 and a maximum aspect ratio of 4:1.");
+    if(r.rank < 2 || r.rank > 4) throw std::runtime_error("Search rank must be between 2 and 4.");
     const XYPt p(evaluate(r.x), evaluate(r.y));
     XYPt p2;
     auto inside = [&](const XYPt& q) { return q.x >= 0 && q.y >= 0 && q.x <= width && q.y <= height; };
-    if(!inside(p)) throw std::runtime_error("El punto debe estar dentro del papel.");
+    if(!inside(p)) throw std::runtime_error("The point must be inside the paper.");
     if(r.line) {
       p2 = XYPt(evaluate(r.x2), evaluate(r.y2));
       if(!inside(p2) || (p-p2).Mag() < 1e-7)
-        throw std::runtime_error("La recta necesita dos puntos distintos dentro del papel.");
+        throw std::runtime_error("A line needs two different points inside the paper.");
     }
     if(!ready || r.rank != cachedRank || width != cachedWidth || height != cachedHeight) {
       ready = false;
@@ -164,7 +170,7 @@ std::string solve(const Request& r) {
       ReferenceFinder::sDatabaseStatusSkip = 1000;
       ReferenceFinder::SetDatabaseFn(databaseProgress);
       ReferenceFinder::MakeAllMarksAndLines();
-      if(cancelled) throw std::runtime_error("Búsqueda cancelada.");
+      if(cancelled) throw std::runtime_error("Search cancelled.");
       cachedRank = r.rank; cachedWidth = width; cachedHeight = height; ready = true;
     }
     std::string found;

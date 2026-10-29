@@ -27,8 +27,8 @@ struct SearchInput: Codable, Equatable {
     var width = "1"
     var height = "1"
     var line = false
-    var rank = 4
-    var summary: String { line ? "Recta (\(x), \(y)) → (\(x2), \(y2))" : "Punto (\(x), \(y))" }
+    var rank = 3
+    var summary: String { line ? "Line (\(x), \(y)) → (\(x2), \(y2))" : "Point (\(x), \(y))" }
 }
 
 @MainActor
@@ -40,6 +40,7 @@ final class SearchModel: ObservableObject {
     @Published var lastInput: SearchInput?
     @Published var history: [SearchInput] = []
     private let queue = DispatchQueue(label: "es.angelsoto.origami.engine", qos: .userInitiated)
+    private var resultsCache: [(SearchInput, SearchResponse)] = []
     private let historyKey = "origami.recent.v1"
 
     init() {
@@ -51,6 +52,11 @@ final class SearchModel: ObservableObject {
     func search() {
         guard !isSearching else { return }
         let request = input
+        if let cached = resultsCache.first(where: { $0.0 == request }) {
+            response = cached.1; lastInput = request; error = nil
+            remember(request)
+            return
+        }
         isSearching = true; error = nil; response = nil
         queue.async {
             let result = RFBridge.search(x: request.x, y: request.y, x2: request.x2,
@@ -60,20 +66,25 @@ final class SearchModel: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.isSearching = false
-                guard let decoded else { self.error = "No se ha podido leer el resultado."; return }
+                guard let decoded else { self.error = "Unable to read the search results. Please try again."; return }
                 if let error = decoded.error { self.error = error; return }
                 self.response = decoded; self.lastInput = request
-                self.history.removeAll { $0 == request }
-                self.history.insert(request, at: 0)
-                self.history = Array(self.history.prefix(12))
-                if let data = try? JSONEncoder().encode(self.history) {
-                    UserDefaults.standard.set(data, forKey: self.historyKey)
-                }
+                self.resultsCache.insert((request, decoded), at: 0)
+                self.resultsCache = Array(self.resultsCache.prefix(8))
+                self.remember(request)
             }
+        }
+    }
+    private func remember(_ request: SearchInput) {
+        history.removeAll { $0 == request }
+        history.insert(request, at: 0)
+        history = Array(history.prefix(12))
+        if let data = try? JSONEncoder().encode(history) {
+            UserDefaults.standard.set(data, forKey: historyKey)
         }
     }
     func cancel() { RFBridge.cancel() }
     func clearHistory() {
-        history = []; UserDefaults.standard.removeObject(forKey: historyKey)
+        history = []; resultsCache = []; UserDefaults.standard.removeObject(forKey: historyKey)
     }
 }

@@ -5,35 +5,35 @@ struct AboutView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Cómo utilizarla") {
-                    Text("1. Indica un punto (X, Y) o una recta mediante dos puntos distintos.")
-                    Text("2. Usa un cuadrado 1 × 1 o ajusta las dimensiones del rectángulo. Las coordenadas usan las mismas unidades.")
-                    Text("3. Pulsa Encontrar pliegues y elige una de las soluciones. Sigue los diagramas con Anterior y Siguiente.")
-                    Text("Puedes escribir 1/3, sqrt(2)/2, sin(deg2rad(30)) o (1+sqrt(5))/4. El origen está abajo a la izquierda.")
-                    Text("La búsqueda es finita y puede devolver una aproximación. No se garantiza la construcción óptima ni exacta para cualquier coordenada.")
+                Section("Quick start") {
+                    Text("1. Enter X and Y, or tap the paper to place a point. For a line, enter two distinct points.")
+                    Text("2. Use the default unit square or open Paper & search to set a rectangle. Coordinates use the same units as the paper.")
+                    Text("3. Tap Find folds, choose a solution, and follow the large diagrams using Back and Next. Expand or zoom a diagram to inspect it.")
+                    Text("Expressions include 1/3, sqrt(2)/2, sin(deg2rad(30)), and (1+sqrt(5))/4. The origin is the bottom-left corner. The live paper preview supports numbers, fractions, and sqrt(2) expressions.")
+                    Text("Search is finite and may return an approximation. Exact or globally optimal constructions are not guaranteed. Balanced search uses rank 3; choose Deeper (rank 4) to explore more constructions.")
                 }
-                Section("Créditos") {
-                    credit("Robert J. Lang", "Creador de ReferenceFinder y autor del motor geométrico y de búsqueda original.")
-                    credit("Carlos A. Furuti", "Analizador de expresiones matemáticas del motor original.")
-                    credit("Jérôme Laheurte", "Autor de la adaptación histórica ReferenceFinder 4 para iPhone (2009). Su código se estudió como referencia; esta interfaz se ha escrito de nuevo.")
-                    credit("Mu-Tsun Tsai", "Crédito por la corrección del motor señalada por Robert J. Lang en su actualización de 2024.")
-                    Text("Subido para iOS por Ángel Soto").font(.headline)
-                    credit("HuxleyBerry", "Repositorio web revisado como referencia técnica. No se incorpora su código a esta aplicación.")
+                Section("Credits") {
+                    credit("Robert J. Lang", "Creator of ReferenceFinder and author of the original geometry and search engine.")
+                    credit("Carlos A. Furuti", "Mathematical expression parser in the original engine.")
+                    credit("Jérôme Laheurte", "Author of the historical ReferenceFinder 4 iPhone port (2009). His code was studied as a reference; this interface was newly written.")
+                    credit("Mu-Tsun Tsai", "Credited for the engine bug fix acknowledged by Robert J. Lang in his 2024 update.")
+                    Text("Uploaded for iOS by Ángel Soto").font(.headline)
+                    credit("HuxleyBerry", "Web repository reviewed as a technical reference. Its code is not included in this app.")
                 }
-                Section("Fuentes y licencia") {
+                Section("Sources & license") {
                     Link("ReferenceFinder · Robert J. Lang", destination: URL(string: "https://langorigami.com/article/referencefinder/")!)
-                    Link("Código del motor oficial", destination: URL(string: "https://github.com/bugfolder/ReferenceFinder")!)
-                    Link("Repositorio de HuxleyBerry", destination: URL(string: "https://github.com/HuxleyBerry/origami-reference-finder")!)
-                    NavigationLink("Licencia GNU GPLv2") { LicenseView() }
-                    Text("Este proyecto incorpora software GPLv2 y conserva sus avisos de autoría. Sin garantía. Esta versión es independiente; no implica respaldo de los autores originales.")
+                    Link("Original engine source", destination: URL(string: "https://github.com/bugfolder/ReferenceFinder")!)
+                    Link("HuxleyBerry repository", destination: URL(string: "https://github.com/HuxleyBerry/origami-reference-finder")!)
+                    NavigationLink("GNU GPLv2 license") { LicenseView() }
+                    Text("This project includes GPLv2 software and preserves its copyright notices. Provided without warranty. This independent version does not imply endorsement by the original authors.")
                         .font(.footnote)
                 }
-                Section("Privacidad") {
-                    Text("Las búsquedas y los diagramas se calculan en el dispositivo. El historial se guarda únicamente en el almacenamiento local de la app y puedes borrarlo desde la pantalla principal. No hay cuentas, anuncios, analítica ni servidores propios. Compartir y abrir enlaces son acciones voluntarias.")
+                Section("Privacy") {
+                    Text("Searches and diagrams are calculated on your device. Recent searches are stored locally and can be cleared from the home screen. No accounts, ads, analytics, or developer-operated servers. Sharing and external links are optional.")
                 }
-                Section { Text("Origami Reference Finder 1.0 · Subido para iOS por Ángel Soto").font(.footnote) }
-            }.navigationTitle("Ayuda y créditos")
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Cerrar") { dismiss() } } }
+                Section { Text("Origami Reference Finder 1.1 · Uploaded for iOS by Ángel Soto").font(.footnote) }
+            }.navigationTitle("Help & credits")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
     private func credit(_ name: String, _ description: String) -> some View {
@@ -47,7 +47,7 @@ struct LicenseView: View {
     private var license: String {
         guard let url = Bundle.main.url(forResource: "LICENSE", withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return "No se ha podido cargar la licencia. Consulta el archivo LICENSE.txt del código fuente."
+            return "Unable to load the license. See LICENSE.txt in the source repository."
         }
         return text
     }
