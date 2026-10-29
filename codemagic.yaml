@@ -1,0 +1,58 @@
+workflows:
+  ios-check:
+    name: iOS · comprobar compilación sin firma
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+    scripts:
+      - name: Pruebas del motor geométrico
+        script: python3 scripts/test_engine.py
+      - name: Compilar la app para simulador
+        script: |
+          set -euo pipefail
+          xcodebuild -project OrigamiReference.xcodeproj -scheme OrigamiReference \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
+    artifacts:
+      - build/DerivedData/Build/Products/Debug-iphonesimulator/*.app
+
+  ios-release:
+    name: iOS · generar IPA firmada
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    integrations:
+      # Cambia este valor por el nombre de tu integración existente en Codemagic.
+      app_store_connect: TU_INTEGRACION_APP_STORE_CONNECT
+    environment:
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: es.angelsoto.origamireferencefinder
+      vars:
+        BUNDLE_ID: es.angelsoto.origamireferencefinder
+        # Número entero mayor que cualquier build previo de esta app.
+        BUILD_NUMBER_BASE: "1"
+    scripts:
+      - name: Pruebas del motor
+        script: python3 scripts/test_engine.py
+      - name: Preparar firma y versión
+        script: |
+          set -euo pipefail
+          python3 scripts/generate_project.py
+          xcode-project use-profiles
+          BUILD_NUMBER=$((BUILD_NUMBER_BASE + ${PROJECT_BUILD_NUMBER:-0}))
+          agvtool new-version -all "$BUILD_NUMBER"
+      - name: Generar IPA
+        script: |
+          set -euo pipefail
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/OrigamiReference.xcodeproj" \
+            --scheme OrigamiReference
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    # La entrega a Apple es manual. Tras resolver la licencia y probar en iPhone,
+    # puedes añadir publishing.app_store_connect usando auth: integration.
