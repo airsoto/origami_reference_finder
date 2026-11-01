@@ -1,0 +1,37 @@
+{
+  "checked_on": "2026-11-01",
+  "app_engine": "Engine/ReferenceFinder.cpp",
+  "app_engine_sha256": "d8fea056cce4987f46a927d58632c2057070a843e0190c80a0c50b4b27df4e0a",
+  "upstream_repository": "https://github.com/bugfolder/ReferenceFinder",
+  "upstream_commit": "5c084091cffabc41e75c711e6159cf7cbe922e7c",
+  "upstream_blob": "f2ffc6c9f39f4079485820ec9a7df23c323f46ad",
+  "comparison": "Implementation matches upstream after normalizing the attribution header, newlines, and two C++17 dependent-base this-> qualifiers.",
+  "fixes": [
+    {
+      "commit": "946b6eb15e5abcf563e30edcbee066ca69da03ce",
+      "upstream_pr": 1,
+      "author": "Mu-Tsun Tsai",
+      "fix": "Store rlh2 rather than re-inserting rlh1 when generating the second axiom-5 root.",
+      "already_present_in_v1_1": true,
+      "regression": "upstream_axiom5_second_root"
+    },
+    {
+      "commit": "a1d109132313fb67a3e27f30ef4b8aff0c118698",
+      "upstream_pr": 2,
+      "author": "Mu-Tsun Tsai",
+      "fix": "Use bin counts minus one in X/Y and angle/distance key generation to avoid boundary collisions.",
+      "already_present_in_v1_1": true,
+      "regression": "upstream_boundary_keys"
+    }
+  ],
+  "web_review": {
+    "url": "https://mutsuntsai.github.io/reference-finder/",
+    "source": "https://github.com/MuTsunTsai/reference-finder",
+    "reviewed": [
+      "src/app/components/solution.tsx",
+      "src/app/components/svg/diagram.scss",
+      "CHANGELOG.md"
+    ],
+    "notes": "The web app displays every solution step and supports enlarged diagrams. Native sequence grid implemented independently; no web source copied. The web fork has additional features and optimizations beyond the two original-engine fixes; this audit does not claim feature parity."
+  }
+}

@@ -132,7 +132,7 @@ struct ContentView: View {
                         Button("√2") { appendToFocused("sqrt(2)") }
                     }
                     Spacer()
-                    Button("Done") { field = nil }
+                    DoneButton { field = nil }
                 }
             }.sheet(isPresented: $showingAbout) { AboutView() }.tint(ink)
         }
@@ -305,88 +305,211 @@ private struct PaperPreview: View {
     }
 }
 
+// Explicit intrinsic width keeps the textual toolbar action comfortably oval,
+// including on systems that automatically add round toolbar backgrounds.
+struct DoneButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Text("Done")
+                .font(.body.weight(.semibold))
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 18)
+                .frame(minWidth: 82, minHeight: 44)
+                .foregroundStyle(.white)
+                .background(ink, in: Capsule())
+        }.buttonStyle(.plain)
+    }
+}
+
 struct SolutionView: View {
     let solution: FoldSolution
     let number: Int
     let input: SearchInput
+    @AppStorage("origami.sequence.columns") private var preferredColumns = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var stepIndex = 0
     @State private var expanded = false
 
     private var shareText: String {
         "Origami Reference Finder — \(input.summary)\nPaper: \(input.width) × \(input.height)\nRank: \(solution.rank)\nError: \(solution.error)\n\n\(solution.instructions)\n\nEngine: Robert J. Lang. Uploaded for iOS by Ángel Soto."
     }
-    private var currentStep: FoldStep? { solution.steps.indices.contains(stepIndex) ? solution.steps[stepIndex] : nil }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(input.summary).font(.title2.bold())
-                Text("Rank \(solution.rank) · error \(solution.error.formatted(.number.precision(.significantDigits(1...4))))")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                if let step = currentStep {
-                    HStack {
-                        Text("STEP \(stepIndex + 1) / \(solution.steps.count)")
-                            .font(.caption.bold()).tracking(2).foregroundStyle(ink)
-                        Spacer()
-                        Button { expanded = true } label: { Label("Expand", systemImage: "arrow.up.left.and.arrow.down.right") }
-                            .font(.caption.bold())
+        GeometryReader { geometry in
+            let count = columnCount(for: geometry.size)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(input.summary).font(.title2.bold())
+                        Text("Rank \(solution.rank) · error \(solution.error.formatted(.number.precision(.significantDigits(1...4))))")
+                            .font(.subheadline).foregroundStyle(.secondary)
                     }
-                    DiagramStage(step: step).frame(height: 360)
-                    ProgressView(value: Double(stepIndex + 1), total: Double(solution.steps.count)).tint(ink)
-                    Text(step.caption).font(.title3).textSelection(.enabled)
-                    controls
-                    legend
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                    if !solution.steps.isEmpty {
+                        sequenceHeader
+                        legend
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16, alignment: .top), count: count),
+                                  alignment: .leading, spacing: 20) {
                             ForEach(solution.steps.indices, id: \.self) { index in
-                                Button { stepIndex = index } label: {
-                                    Text(String(index + 1)).font(.subheadline.bold()).frame(width: 44, height: 44)
-                                        .background(index == stepIndex ? ink : Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
-                                        .foregroundStyle(index == stepIndex ? .white : ink)
-                                }.accessibilityLabel("Go to step \(index + 1)")
+                                stepCard(at: index)
                             }
                         }
+                    } else {
+                        Label("This reference is already on the original paper.", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(ink).card()
                     }
-                } else {
-                    Label("This reference is already on the original paper.", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(ink).card()
+                    DisclosureGroup("Text instructions") {
+                        Text(solution.instructions).font(.body).textSelection(.enabled).padding(.top, 12)
+                    }.card()
+                    ShareLink(item: shareText) {
+                        Label("Share instructions", systemImage: "square.and.arrow.up")
+                            .frame(minHeight: 36)
+                    }.buttonStyle(.bordered).frame(maxWidth: .infinity)
                 }
-                DisclosureGroup("All instructions") {
-                    Text(solution.instructions).font(.body).textSelection(.enabled).padding(.top, 12)
-                }.card()
-                ShareLink(item: shareText) { Label("Share instructions", systemImage: "square.and.arrow.up") }
-                    .buttonStyle(.bordered).frame(maxWidth: .infinity)
-            }.padding(20).frame(maxWidth: 750).frame(maxWidth: .infinity)
-        }.background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Route \(number)").navigationBarTitleDisplayMode(.inline).tint(ink)
-            .sheet(isPresented: $expanded) {
-                NavigationStack {
-                    VStack(spacing: 16) {
-                        if let step = currentStep {
-                            DiagramStage(step: step)
-                            Text(step.caption).font(.subheadline).padding(.horizontal)
-                            controls.padding(.horizontal)
-                        }
-                    }.padding(.bottom).navigationTitle("Step \(stepIndex + 1)")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { expanded = false } } }
-                }.tint(ink)
+                .padding(20)
+                .frame(maxWidth: 1200)
+                .frame(maxWidth: .infinity)
             }
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        .navigationTitle("Route \(number)")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(ink)
+        .sheet(isPresented: $expanded) {
+            SequenceStepDetail(solution: solution, stepIndex: $stepIndex)
+        }
     }
-    private var controls: some View {
-        HStack {
-            Button { stepIndex -= 1 } label: { Label("Back", systemImage: "chevron.left").frame(minHeight: 36) }
-                .disabled(stepIndex == 0)
-            Spacer()
-            Button { stepIndex += 1 } label: { Label("Next", systemImage: "chevron.right").frame(minHeight: 36) }
-                .disabled(stepIndex >= solution.steps.count - 1)
-        }.buttonStyle(.bordered).controlSize(.large)
+
+    // Geometry, rather than device orientation notifications, also handles
+    // iPad multitasking and window resizing. Larger accessibility text stays readable.
+    private func columnCount(for size: CGSize) -> Int {
+        if dynamicTypeSize.isAccessibilitySize { return 1 }
+        if (1...4).contains(preferredColumns) { return preferredColumns }
+        let width = min(size.width, 1200)
+        if size.width > size.height { return width >= 1000 ? 4 : 3 }
+        return width >= 600 ? 2 : 1
     }
+
+    private var sequenceHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center) {
+                    Text("Full folding sequence").font(.title3.bold())
+                    Spacer()
+                    columnPicker
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Full folding sequence").font(.title3.bold())
+                    columnPicker
+                }
+            }
+            Text("All \(solution.steps.count) steps in folding order. Tap any diagram to enlarge.")
+                .font(.subheadline).foregroundStyle(.secondary)
+            if dynamicTypeSize.isAccessibilitySize {
+                Text("One column is used with larger accessibility text.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var columnPicker: some View {
+        Menu {
+            Picker("Columns", selection: $preferredColumns) {
+                Text("Auto").tag(0)
+                ForEach(1...4, id: \.self) { count in
+                    Text("\(count) \(count == 1 ? "column" : "columns")").tag(count)
+                }
+            }
+        } label: {
+            Label(preferredColumns == 0 ? "Columns: Auto" : "Columns: \(preferredColumns)",
+                  systemImage: "square.grid.2x2")
+                .font(.subheadline)
+                .frame(minHeight: 44)
+        }
+        .disabled(dynamicTypeSize.isAccessibilitySize)
+        .accessibilityLabel("Number of diagram columns")
+    }
+
+    private func stepCard(at index: Int) -> some View {
+        let step = solution.steps[index]
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("STEP \(index + 1)").font(.caption.bold()).tracking(1.5)
+                Spacer()
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.caption)
+            }.foregroundStyle(ink)
+            Button {
+                stepIndex = index
+                expanded = true
+            } label: {
+                DiagramView(svg: step.svg)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .aspectRatio(1, contentMode: .fit)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(.gray.opacity(0.15)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Step \(index + 1). \(step.caption)")
+            .accessibilityHint("Opens an enlarged folding diagram")
+            Text(step.caption)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .card()
+    }
+
     private var legend: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             Label("Teal: references to align", systemImage: "circle.fill").foregroundStyle(ink)
             Label("Orange: new fold or result", systemImage: "line.diagonal").foregroundStyle(foldColor)
-            Label("Gray: existing creases · arrows: fold direction", systemImage: "arrow.turn.up.right").foregroundStyle(.secondary)
+            Label("Gray: existing creases · arrows: fold direction", systemImage: "arrow.turn.up.right")
+                .foregroundStyle(.secondary)
         }.font(.caption)
+    }
+}
+
+private struct SequenceStepDetail: View {
+    let solution: FoldSolution
+    @Binding var stepIndex: Int
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            if solution.steps.indices.contains(stepIndex) {
+                let step = solution.steps[stepIndex]
+                GeometryReader { geometry in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            DiagramStage(step: step)
+                                .frame(height: max(240, min(geometry.size.width - 32, geometry.size.height * 0.65)))
+                            Text(step.caption).font(.body).textSelection(.enabled)
+                            HStack {
+                                Button { stepIndex -= 1 } label: {
+                                    Label("Back", systemImage: "chevron.left").frame(minHeight: 36)
+                                }.disabled(stepIndex == 0)
+                                Spacer()
+                                Text("\(stepIndex + 1) / \(solution.steps.count)")
+                                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                Spacer()
+                                Button { stepIndex += 1 } label: {
+                                    Label("Next", systemImage: "chevron.right").frame(minHeight: 36)
+                                }.disabled(stepIndex == solution.steps.count - 1)
+                            }.buttonStyle(.bordered).controlSize(.large)
+                        }.padding(16).frame(maxWidth: 1000).frame(maxWidth: .infinity)
+                    }
+                }
+                .navigationTitle("Step \(stepIndex + 1)")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { DoneButton { dismiss() } }
+                }
+            }
+        }.tint(ink)
     }
 }
 

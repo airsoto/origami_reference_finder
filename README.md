@@ -1,3 +1,11 @@
+# Version 1.2 — complete folding sequences
+
+All diagrams are now visible together for each solution, with adaptive/user-selected columns and individual enlargement. Done buttons use a padded capsule. The supplied icon replaces the previous app icon. Both 2024 Mu-Tsun Tsai fixes were already in the engine and now have dedicated regression tests.
+
+See [release notes](RELEASE_NOTES_1.2.md) and [engine audit](ENGINE_AUDIT.json).
+
+---
+
 # Version 1.1 — visual refresh
 
 - Entire app interface, help, errors, and sharing text in English.

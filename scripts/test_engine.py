@@ -12,6 +12,11 @@ with tempfile.TemporaryDirectory() as tmp:
     sources = [str(p) for p in (root/'Engine').glob('*.cpp')]
     subprocess.run([compiler, '-std=c++17', '-O2', '-pthread', '-I', str(root/'Engine'),
                     *sources, str(root/'Tests/regression.cpp'), '-o', exe], check=True)
+    upstream_exe = str(Path(tmp)/'upstream_fixes')
+    subprocess.run([compiler, '-std=c++17', '-O2', '-pthread', '-I', str(root/'Engine'),
+                    str(root/'Engine/ReferenceFinder.cpp'), str(root/'Tests/upstream_fixes.cpp'),
+                    '-o', upstream_exe], check=True)
+    subprocess.run([upstream_exe], check=True, timeout=60)
     result = subprocess.run([exe], check=True, capture_output=True, text=True, timeout=60)
     cases = {name: json.loads(data) for name,data in (line.split('\t',1) for line in result.stdout.splitlines())}
     failures = {'same_point','outside','zero_divide','sqrt_negative','set_rejected','unknown','invalid_rank','invalid_paper'}
@@ -32,4 +37,4 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in ['thirds','edge_third','line','corner']:
         assert min(x['error'] for x in cases[name]['solutions']) < 1e-8, name
     assert cases['rebuild4']['marks'] == cases['thirds']['marks']
-    print(f'{len(cases)} search cases passed; exact constructions and SVG validated.')
+    print(f'{len(cases)} search cases and 2 upstream-fix regressions passed; exact constructions and SVG validated.')

@@ -55,7 +55,7 @@ for mode in ['Debug','Release']:
     if mode == 'Debug': common['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = 'DEBUG'
     project_configs.append(obj('project:'+mode, f'isa = XCBuildConfiguration; buildSettings = {settings(common)}; name = {mode};'))
     target = {'PRODUCT_NAME':quote('$(TARGET_NAME)'), 'PRODUCT_BUNDLE_IDENTIFIER':quote(os.environ.get('BUNDLE_ID', 'es.angelsoto.origamireferencefinder')),
-              'MARKETING_VERSION':'1.1', 'CURRENT_PROJECT_VERSION':'1', 'VERSIONING_SYSTEM':quote('apple-generic'),
+              'MARKETING_VERSION':'1.2', 'CURRENT_PROJECT_VERSION':'1', 'VERSIONING_SYSTEM':quote('apple-generic'),
               'INFOPLIST_FILE':quote('App/Info.plist'), 'GENERATE_INFOPLIST_FILE':'NO',
               'SWIFT_OBJC_BRIDGING_HEADER':quote('App/OrigamiReference-Bridging-Header.h'),
               'HEADER_SEARCH_PATHS':quote('$(SRCROOT)/Engine'),
