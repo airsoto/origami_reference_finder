@@ -119,7 +119,7 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button { showingCP = true } label: {
-                        Label("Points in CP", systemImage: "square.dashed.inset.filled")
+                        HStack(spacing: 5) { Image(systemName: "square.dashed.inset.filled"); Text("CP Points").font(.subheadline.bold()) }.fixedSize(horizontal: true, vertical: false)
                     }
                     .accessibilityLabel("Points in CP: import and mark a crease pattern")
                 }
@@ -631,9 +631,10 @@ private struct CPPointsView: View {
                     if let problem { Text(problem).foregroundStyle(.red).font(.caption) }
                     if let image {
                         Text(sourceLabel).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        Label("Pinch to zoom. Drag to pan; tap to mark.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
                         CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
                                           references: references, mode: mode, onTouch: handleTouch)
-                            .frame(height: 380)
+                            .frame(height: 440)
                             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                         if paperRegion == nil {
                             Label(firstCorner == nil ?
@@ -828,7 +829,7 @@ private struct CPPointsView: View {
     }
 }
 
-private struct CPSelectionCanvas: View {
+private struct CPSelectionCanvas: UIViewRepresentable {
     let image: UIImage
     let region: CGRect?
     let corner: CGPoint?
@@ -836,53 +837,129 @@ private struct CPSelectionCanvas: View {
     let mode: CPPointsView.CPMode
     let onTouch: (CGPoint) -> Void
 
-    var body: some View {
-        GeometryReader { geometry in
-            let bounds = geometry.size
-            let ratio = min(bounds.width / max(image.size.width, 1),
-                            bounds.height / max(image.size.height, 1))
-            let size = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
-            let origin = CGPoint(x: (bounds.width - size.width) / 2,
-                                 y: (bounds.height - size.height) / 2)
-            ZStack(alignment: .topLeading) {
-                Image(uiImage: image)
-                    .resizable().interpolation(.high)
-                    .frame(width: size.width, height: size.height)
-                    .position(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
-                if let corner {
-                    Circle().fill(.orange).frame(width: 12, height: 12)
-                        .position(x: origin.x + corner.x * size.width,
-                                  y: origin.y + corner.y * size.height)
-                }
-                if let region {
-                    Rectangle()
-                        .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [7, 4]))
-                        .frame(width: region.width * size.width, height: region.height * size.height)
-                        .position(x: origin.x + region.midX * size.width,
-                                  y: origin.y + region.midY * size.height)
-                    ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
-                        let p = reference.position
-                        Text("\(index + 1)")
-                            .font(.caption.bold()).foregroundStyle(.white)
-                            .frame(width: 26, height: 26)
-                            .background(ink, in: Circle())
-                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                            .position(x: origin.x + (region.minX + p.x * region.width) * size.width,
-                                      y: origin.y + (region.minY + p.y * region.height) * size.height)
-                    }
-                }
-            }
-            .frame(width: bounds.width, height: bounds.height)
-            .contentShape(Rectangle())
-            .highPriorityGesture(DragGesture(minimumDistance: 0).onEnded { event in
-                let point = CGPoint(x: (event.location.x - origin.x) / max(size.width, 1),
-                                    y: (event.location.y - origin.y) / max(size.height, 1))
-                guard (0...1).contains(point.x), (0...1).contains(point.y) else { return }
-                onTouch(point)
-            })
+    func makeCoordinator() -> Coordinator { Coordinator(onTouch: onTouch) }
+
+    func makeUIView(context: Context) -> CPZoomScrollView {
+        let scroll = CPZoomScrollView()
+        scroll.delegate = context.coordinator
+        scroll.minimumZoomScale = 1
+        scroll.maximumZoomScale = 10
+        scroll.bouncesZoom = true
+        scroll.contentInsetAdjustmentBehavior = .never
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.didTap(_:)))
+        scroll.paperView.addGestureRecognizer(tap)
+        scroll.paperView.isUserInteractionEnabled = true
+        return scroll
+    }
+
+    func updateUIView(_ scroll: CPZoomScrollView, context: Context) {
+        context.coordinator.onTouch = onTouch
+        scroll.setImageIfNeeded(image)
+        scroll.paperView.region = region
+        scroll.paperView.corner = corner
+        scroll.paperView.references = references.enumerated().map { ($0.offset + 1, $0.element.position) }
+        scroll.paperView.setNeedsDisplay()
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        var onTouch: (CGPoint) -> Void
+        init(onTouch: @escaping (CGPoint) -> Void) { self.onTouch = onTouch }
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            (scrollView as? CPZoomScrollView)?.paperView
         }
-        .clipped()
-        .accessibilityLabel("CP image. Select two corners of the paper, then tap to add numbered points.")
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            (scrollView as? CPZoomScrollView)?.centerPaper()
+        }
+        @objc func didTap(_ gesture: UITapGestureRecognizer) {
+            guard let paper = gesture.view, paper.bounds.width > 0, paper.bounds.height > 0 else { return }
+            let p = gesture.location(in: paper)
+            let x = p.x / paper.bounds.width
+            let y = p.y / paper.bounds.height
+            guard (0...1).contains(x), (0...1).contains(y) else { return }
+            onTouch(CGPoint(x: x, y: y))
+        }
+    }
+}
+
+private final class CPZoomScrollView: UIScrollView {
+    let paperView = CPAnnotatedPaperView()
+    private var displayedImage: UIImage?
+    private var previousSize: CGSize = .zero
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(paperView)
+        paperView.contentMode = .redraw
+    }
+    required init?(coder: NSCoder) { fatalError("Not used") }
+
+    func setImageIfNeeded(_ image: UIImage) {
+        guard displayedImage !== image else { return }
+        displayedImage = image
+        paperView.image = image
+        zoomScale = 1
+        previousSize = .zero
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let image = displayedImage, bounds.width > 0, bounds.height > 0 else { return }
+        if previousSize != bounds.size {
+            previousSize = bounds.size
+            let fit = min(bounds.width / max(image.size.width, 1),
+                          bounds.height / max(image.size.height, 1))
+            let size = CGSize(width: image.size.width * fit, height: image.size.height * fit)
+            zoomScale = 1
+            paperView.frame = CGRect(origin: .zero, size: size)
+            contentSize = size
+        }
+        centerPaper()
+    }
+
+    func centerPaper() {
+        let x = max(0, (bounds.width - contentSize.width) / 2)
+        let y = max(0, (bounds.height - contentSize.height) / 2)
+        contentInset = UIEdgeInsets(top: y, left: x, bottom: y, right: x)
+    }
+}
+
+private final class CPAnnotatedPaperView: UIView {
+    var image: UIImage?
+    var region: CGRect?
+    var corner: CGPoint?
+    var references: [(Int, CGPoint)] = []
+
+    override func draw(_ rect: CGRect) {
+        guard let image, let context = UIGraphicsGetCurrentContext() else { return }
+        image.draw(in: bounds)
+        if let corner {
+            let x = corner.x * bounds.width, y = corner.y * bounds.height
+            context.setFillColor(UIColor.systemOrange.cgColor)
+            context.fillEllipse(in: CGRect(x: x - 5, y: y - 5, width: 10, height: 10))
+        }
+        guard let region else { return }
+        let area = CGRect(x: region.minX * bounds.width, y: region.minY * bounds.height,
+                          width: region.width * bounds.width, height: region.height * bounds.height)
+        context.setStrokeColor(UIColor.systemOrange.cgColor)
+        context.setLineWidth(2)
+        context.setLineDash(phase: 0, lengths: [6, 4])
+        context.stroke(area)
+        context.setLineDash(phase: 0, lengths: [])
+        for (number, point) in references {
+            let x = (region.minX + point.x * region.width) * bounds.width
+            let y = (region.minY + point.y * region.height) * bounds.height
+            let marker = CGRect(x: x - 12, y: y - 12, width: 24, height: 24)
+            context.setFillColor(UIColor(red: 0.03, green: 0.43, blue: 0.48, alpha: 1).cgColor)
+            context.fillEllipse(in: marker)
+            context.setStrokeColor(UIColor.white.cgColor)
+            context.setLineWidth(2)
+            context.strokeEllipse(in: marker)
+            let text = "\(number)" as NSString
+            let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 13), .foregroundColor: UIColor.white]
+            let textSize = text.size(withAttributes: attrs)
+            text.draw(at: CGPoint(x: x - textSize.width / 2, y: y - textSize.height / 2), withAttributes: attrs)
+        }
     }
 }
 
