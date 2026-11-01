@@ -39,7 +39,7 @@ final class SearchModel: ObservableObject {
     @Published var response: SearchResponse?
     @Published var lastInput: SearchInput?
     @Published var history: [SearchInput] = []
-    private let queue = DispatchQueue(label: "es.angelsoto.origami.engine", qos: .userInitiated)
+    private static let engineQueue = DispatchQueue(label: "es.angelsoto.origami.engine.shared", qos: .userInitiated)
     private var resultsCache: [(SearchInput, SearchResponse)] = []
     private let historyKey = "origami.recent.v1"
 
@@ -58,7 +58,7 @@ final class SearchModel: ObservableObject {
             return
         }
         isSearching = true; error = nil; response = nil
-        queue.async {
+        Self.engineQueue.async {
             let result = RFBridge.search(x: request.x, y: request.y, x2: request.x2,
                 y2: request.y2, width: request.width, height: request.height,
                 line: request.line, rank: request.rank)
