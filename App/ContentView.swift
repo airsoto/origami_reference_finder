@@ -735,7 +735,12 @@ private struct CPPointsView: View {
                 problem = "Select opposite corners of the paper, farther apart."
                 return
             }
-            paperRegion = CGRect(x: left, y: top, width: width, height: height)
+            // Enforce a square in original image coordinates, even when
+            // the imported image has a rectangular aspect ratio.
+            let pixelSide = min(width * image!.size.width, height * image!.size.height)
+            paperRegion = CGRect(x: left, y: top,
+                                 width: pixelSide / max(image!.size.width, 1),
+                                 height: pixelSide / max(image!.size.height, 1))
             self.firstCorner = nil
             references = []
             mode = .points
