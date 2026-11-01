@@ -14,15 +14,15 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 12) {
                     header
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Picker("Reference type", selection: $model.input.line) {
                             Text("Point").tag(false)
                             Text("Line").tag(true)
                         }.pickerStyle(.segmented)
                         PaperPreview(input: $model.input)
-                            .frame(height: 220)
+                            .frame(height: 135)
                         HStack {
                             Label(model.input.line ? "First point" : "Target point", systemImage: "scope")
                                 .font(.headline)
@@ -51,8 +51,7 @@ struct ContentView: View {
                         Text("Tap the paper to place \(model.input.line ? "the first point" : "your point"). Origin: bottom left.")
                             .font(.caption).foregroundStyle(.secondary)
                     }.card().disabled(model.isSearching)
-                    DisclosureGroup(isExpanded: $advanced) {
-                        VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 12) {
                                 dimension("Width", text: $model.input.width)
                                 dimension("Height", text: $model.input.height)
@@ -64,9 +63,6 @@ struct ContentView: View {
                             }.pickerStyle(.segmented)
                             Text("Balanced is faster to start. Deeper explores more constructions. Rank measures construction complexity, not the number of diagrams.")
                                 .font(.caption).foregroundStyle(.secondary)
-                        }.padding(.top, 14)
-                    } label: {
-                        Label("Paper & search", systemImage: "slider.horizontal.3").font(.subheadline.bold())
                     }.card().disabled(model.isSearching)
                     if model.isSearching {
                         VStack(spacing: 12) {
@@ -114,7 +110,7 @@ struct ContentView: View {
                     Text("ReferenceFinder by Robert J. Lang\nUploaded for iOS by Ángel Soto")
                         .font(.caption2).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity).multilineTextAlignment(.center)
-                }.padding(20).frame(maxWidth: 650).frame(maxWidth: .infinity)
+                }.padding(12).frame(maxWidth: 650).frame(maxWidth: .infinity)
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Reference Finder").navigationBarTitleDisplayMode(.inline)
@@ -140,8 +136,8 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("From point\nto paper fold.").font(.system(size: 34, weight: .bold, design: .rounded))
-            Text("Place a reference. Follow the folds.")
+            Text("Find your folds").font(.system(size: 23, weight: .bold, design: .rounded))
+            Text("Enter a reference and choose your search depth.")
                 .font(.subheadline).foregroundStyle(.secondary)
         }.accessibilityElement(children: .combine)
     }
@@ -210,10 +206,10 @@ struct ContentView: View {
                         Text(String(index + 1)).font(.title3.bold())
                             .frame(width: 44, height: 44).background(ink.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(solution.error < 1e-8 ? "Exact reference" : "Approximate reference").font(.headline)
+                            Text(solution.error < 1e-8 ? "Exact reference (within tolerance)" : "Approximate reference").font(.headline)
                             Text("\(solution.steps.count) diagrams · rank \(solution.rank)")
                                 .font(.subheadline).foregroundStyle(.secondary)
-                            Text("Error \(solution.error.formatted(.number.precision(.significantDigits(1...4))))")
+                            Text("Error \(String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"), solution.error))")
                                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
@@ -222,7 +218,7 @@ struct ContentView: View {
                 }.buttonStyle(.plain)
             }
             Text("Reference library: \(response.marks ?? 0) points · \(response.lines ?? 0) lines").font(.caption).foregroundStyle(.secondary)
-            Text("Errors use paper units. Solutions are limited to the reference library explored; ‘exact’ means an error below 0.00000001 units.")
+            Text("Errors are displayed to five decimal places in paper units. Exact means below 0.00000001 units, not a mathematical proof; a displayed 0.00000 may be approximate.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -332,7 +328,7 @@ struct SolutionView: View {
     @State private var expanded = false
 
     private var shareText: String {
-        "Origami Reference Finder — \(input.summary)\nPaper: \(input.width) × \(input.height)\nRank: \(solution.rank)\nError: \(solution.error)\n\n\(solution.instructions)\n\nEngine: Robert J. Lang. Uploaded for iOS by Ángel Soto."
+        "Origami Reference Finder — \(input.summary)\nPaper: \(input.width) × \(input.height)\nRank: \(solution.rank)\nError: \(String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"), solution.error))\n\n\(solution.instructions)\n\nEngine: Robert J. Lang. Uploaded for iOS by Ángel Soto."
     }
 
     var body: some View {
@@ -342,7 +338,7 @@ struct SolutionView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(input.summary).font(.title2.bold())
-                        Text("Rank \(solution.rank) · error \(solution.error.formatted(.number.precision(.significantDigits(1...4))))")
+                        Text("Rank \(solution.rank) · error \(String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"), solution.error))")
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                     if !solution.steps.isEmpty {
