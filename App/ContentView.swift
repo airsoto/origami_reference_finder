@@ -305,7 +305,7 @@ private struct PaperPreview: View {
                                          (rect.maxY - localY) / scale)
                     }
             )
-accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Paper preview. \(input.summary). Edit the X and Y fields to set exact coordinates.")
         }
     }
