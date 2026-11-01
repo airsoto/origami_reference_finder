@@ -601,6 +601,8 @@ private struct CPPointsView: View {
     @State private var problem: String?
     @State private var showRoutes = false
     @State private var searchRank = 3
+    @State private var editingCorner: Int?
+    @State private var editingPoint: Int?
 
     enum CPMode { case paper, points }
 
@@ -631,7 +633,7 @@ private struct CPPointsView: View {
                     if let problem { Text(problem).foregroundStyle(.red).font(.caption) }
                     if let image {
                         Text(sourceLabel).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        Label("Pinch to zoom. Drag to pan; tap to mark.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
+                        Label("Pinch to zoom and pan. Tap an orange corner or numbered point, then tap its new position.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
                         CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
                                           references: references, mode: mode, onTouch: handleTouch)
                             .frame(height: 440)
@@ -646,15 +648,22 @@ private struct CPPointsView: View {
                             HStack {
                                 Label("Paper area selected", systemImage: "checkmark.square")
                                 Spacer()
+                                Button("Edit corners") { mode = .paper; editingCorner = nil; editingPoint = nil }
                                 Button("Redefine") {
                                     paperRegion = nil; firstCorner = nil; references = []; mode = .paper
+                                    editingCorner = nil; editingPoint = nil
                                 }
                             }.font(.subheadline)
                             if mode == .paper {
-                                Button("Add reference points") { mode = .points }
+                                Text(editingCorner == nil ? "Tap an orange corner to select it, then tap its new position." :
+                                     "Corner selected. Tap its new position in the image.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Button("Finish paper adjustment") { mode = .points; editingCorner = nil }
                                     .buttonStyle(.borderedProminent)
                             } else {
-                                Text("Tap inside the outlined square to add points. Coordinates use its bottom-left corner as (0, 0).")
+                                Text(editingPoint == nil ?
+                                     "Tap inside the square to add points. Tap a numbered marker to reposition it." :
+                                     "Point selected. Tap its new position.")
                                     .font(.caption).foregroundStyle(.secondary)
                                 ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
                                     HStack {
@@ -723,6 +732,46 @@ private struct CPPointsView: View {
     private func handleTouch(_ point: CGPoint) {
         guard image != nil else { return }
         problem = nil
+        if mode == .paper, let region = paperRegion {
+            let corners = [
+                CGPoint(x: region.minX, y: region.minY),
+                CGPoint(x: region.maxX, y: region.minY),
+                CGPoint(x: region.maxX, y: region.maxY),
+                CGPoint(x: region.minX, y: region.maxY)
+            ]
+            if editingCorner == nil {
+                guard let index = corners.indices.min(by: {
+                    hypot(corners[$0].x - point.x, corners[$0].y - point.y) <
+                    hypot(corners[$1].x - point.x, corners[$1].y - point.y)
+                }), hypot(corners[index].x - point.x, corners[index].y - point.y) < 0.08 else {
+                    problem = "Tap one of the four orange corner handles."
+                    return
+                }
+                editingCorner = index
+                return
+            }
+            guard let selected = editingCorner else { return }
+            let fixed = corners[(selected + 2) % 4]
+            let dx = abs(point.x - fixed.x)
+            let dy = abs(point.y - fixed.y)
+            guard dx > 0.015, dy > 0.015 else {
+                problem = "The paper area is too small."
+                return
+            }
+            let imageSize = image!.size
+            let side = min(dx * imageSize.width, dy * imageSize.height)
+            let w = side / imageSize.width
+            let h = side / imageSize.height
+            let originX = point.x < fixed.x ? fixed.x - w : fixed.x
+            let originY = point.y < fixed.y ? fixed.y - h : fixed.y
+            guard originX >= 0, originY >= 0, originX + w <= 1, originY + h <= 1 else {
+                problem = "Keep the square within the image."
+                return
+            }
+            paperRegion = CGRect(x: originX, y: originY, width: w, height: h)
+            editingCorner = nil
+            return
+        }
         if mode == .paper {
             guard let firstCorner else {
                 self.firstCorner = point
@@ -745,10 +794,26 @@ private struct CPPointsView: View {
             self.firstCorner = nil
             references = []
             mode = .points
-        } else if let paperRegion, paperRegion.contains(point) {
-            references.append(CPReference(position: CGPoint(
+        } else if let paperRegion {
+            let normalized = CGPoint(
                 x: min(1, max(0, (point.x - paperRegion.minX) / paperRegion.width)),
-                y: min(1, max(0, (point.y - paperRegion.minY) / paperRegion.height)))))
+                y: min(1, max(0, (point.y - paperRegion.minY) / paperRegion.height)))
+            if let selected = editingPoint {
+                guard paperRegion.contains(point) else { problem = "Place the point inside the square."; return }
+                references[selected] = CPReference(position: normalized)
+                editingPoint = nil
+                return
+            }
+            if let selected = references.indices.first(where: {
+                let p = references[$0].position
+                let px = paperRegion.minX + p.x * paperRegion.width
+                let py = paperRegion.minY + p.y * paperRegion.height
+                return hypot(px - point.x, py - point.y) < 0.025
+            }) {
+                editingPoint = selected
+            } else if paperRegion.contains(point) {
+                references.append(CPReference(position: normalized))
+            }
         }
     }
 
@@ -825,6 +890,8 @@ private struct CPPointsView: View {
         paperRegion = nil
         references = []
         mode = .paper
+        editingCorner = nil
+        editingPoint = nil
         problem = nil
     }
 }
@@ -946,6 +1013,13 @@ private final class CPAnnotatedPaperView: UIView {
         context.setLineDash(phase: 0, lengths: [6, 4])
         context.stroke(area)
         context.setLineDash(phase: 0, lengths: [])
+        for handle in [CGPoint(x: area.minX, y: area.minY),
+                       CGPoint(x: area.maxX, y: area.minY),
+                       CGPoint(x: area.maxX, y: area.maxY),
+                       CGPoint(x: area.minX, y: area.maxY)] {
+            context.setFillColor(UIColor.systemOrange.cgColor)
+            context.fillEllipse(in: CGRect(x: handle.x - 6, y: handle.y - 6, width: 12, height: 12))
+        }
         for (number, point) in references {
             let x = (region.minX + point.x * region.width) * bounds.width
             let y = (region.minY + point.y * region.height) * bounds.height
