@@ -1040,29 +1040,46 @@ private final class CPAnnotatedPaperView: UIView {
 private struct CPPointsResultsView: View {
     let points: [CPReference]
     let rank: Int
+    @AppStorage("origami.cp.columns") private var columns = 1
     var body: some View {
-        List {
-            Section {
-                Text("Each selected point is searched independently using the original ReferenceFinder engine. Open a point to see its full folding sequences.")
-                    .font(.subheadline)
-            }
-            ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
-                NavigationLink {
-                    CPPointRoutesView(index: index + 1, point: point, rank: rank)
-                } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Point \(index + 1)").font(.headline)
-                        Text(String(format: "X %.5f · Y %.5f", point.position.x, 1 - point.position.y))
-                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("References for \(points.count) CP points")
+                            .font(.headline)
+                        Spacer()
+                        Menu {
+                            Picker("Columns", selection: $columns) {
+                                ForEach(1...4, id: \.self) { count in
+                                    Text("\(count) columns").tag(count)
+                                }
+                            }
+                        } label: {
+                            Label("\(columns) columns", systemImage: "square.grid.2x2")
+                        }
+                    }
+                    Text("Each point is solved independently. Open a folding route to see the full numbered sequence.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
+                                              count: max(1, min(4, columns))),
+                              alignment: .leading, spacing: 12) {
+                        ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
+                            CPPointResultCard(index: index + 1, point: point, rank: rank)
+                        }
                     }
                 }
+                .padding(12)
+                .frame(maxWidth: 1200)
+                .frame(maxWidth: .infinity)
             }
         }
         .navigationTitle("CP folding routes")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-private struct CPPointRoutesView: View {
+private struct CPPointResultCard: View {
     let index: Int
     let point: CPReference
     let rank: Int
@@ -1070,16 +1087,19 @@ private struct CPPointRoutesView: View {
     @State private var started = false
 
     var body: some View {
-        List {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("POINT \(index)").font(.headline).foregroundStyle(ink)
+            Text(String(format: "X %.5f\nY %.5f", point.position.x, 1 - point.position.y))
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             if model.isSearching {
-                ProgressView("Finding references for point \(index)…")
-                Button("Cancel search", role: .cancel) { model.cancel() }
+                ProgressView("Searching…").font(.caption)
             } else if let error = model.error {
-                Text(error).foregroundStyle(.red)
-                Button("Retry") { model.search() }
+                Text(error).font(.caption).foregroundStyle(.red)
+                Button("Retry") { model.search() }.font(.caption)
             } else if let solutions = model.response?.solutions {
                 if solutions.isEmpty {
-                    Text("No references found. Try a deeper search.")
+                    Text("No solutions found. Try a deeper search.")
+                        .font(.caption)
                 }
                 ForEach(Array(solutions.enumerated()), id: \.offset) { route, solution in
                     NavigationLink {
@@ -1087,26 +1107,32 @@ private struct CPPointRoutesView: View {
                                      input: model.lastInput ?? model.input)
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("Route \(route + 1) · \(solution.steps.count) diagrams").font(.headline)
-                            Text("Error \(String(format: "%.5f", solution.error)) · rank \(solution.rank)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                            Text("Route \(route + 1)")
+                                .font(.subheadline.bold())
+                            Text("\(solution.steps.count) diagrams · rank \(solution.rank)")
+                            Text(String(format: "Error %.5f", solution.error))
                         }
-                    }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+                    }.buttonStyle(.plain)
                 }
             }
         }
-        .navigationTitle("CP point \(index)")
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 16))
         .onAppear {
             guard !started else { return }
             started = true
             model.input = SearchInput(
-                x: String(format: "%.8f", point.position.x),
-                y: String(format: "%.8f", 1 - point.position.y),
+                x: String(format: "%.10f", point.position.x),
+                y: String(format: "%.10f", 1 - point.position.y),
                 x2: "1", y2: "1/3", width: "1", height: "1",
                 line: false, rank: rank)
             model.search()
         }
-        .onDisappear { if model.isSearching { model.cancel() } }
     }
 }
