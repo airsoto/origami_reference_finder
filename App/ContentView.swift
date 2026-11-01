@@ -7,6 +7,7 @@ private let foldColor = Color(red: 0.88, green: 0.29, blue: 0.20)
 struct ContentView: View {
     @StateObject private var model = SearchModel()
     @State private var showingAbout = false
+    @State private var showingCP = false
     @State private var advanced = false
     @State private var expressions = false
     @FocusState private var field: String?
@@ -116,6 +117,12 @@ struct ContentView: View {
             .navigationTitle("Reference Finder").navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { showingCP = true } label: {
+                        Label("Points in CP", systemImage: "square.dashed.inset.filled")
+                    }
+                    .accessibilityLabel("Points in CP: import and mark a crease pattern")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showingAbout = true } label: { Image(systemName: "info.circle") }
                         .accessibilityLabel("Help and credits")
@@ -130,7 +137,9 @@ struct ContentView: View {
                     Spacer()
                     DoneButton { field = nil }
                 }
-            }.sheet(isPresented: $showingAbout) { AboutView() }.tint(ink)
+            }.sheet(isPresented: $showingAbout) { AboutView() }
+             .sheet(isPresented: $showingCP) { CPPointsView() }
+             .tint(ink)
         }
     }
 
@@ -564,4 +573,384 @@ struct DiagramView: UIViewRepresentable {
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
     final class Coordinator { var svg = "" }
+}
+
+
+// MARK: - Points in CP
+// A CP is used as a coordinate backdrop, never as a source of automatically
+// detected folds. A user-defined image region maps to the engine's unit square.
+import UniformTypeIdentifiers
+import PDFKit
+
+private struct CPReference: Identifiable {
+    let id = UUID()
+    let position: CGPoint // normalized coordinates within the selected CP area
+}
+
+private struct CPPointsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var image: UIImage?
+    @State private var sourceLabel = ""
+    @State private var firstCorner: CGPoint?
+    @State private var paperRegion: CGRect?
+    @State private var references: [CPReference] = []
+    @State private var mode: CPMode = .paper
+    @State private var showingImporter = false
+    @State private var internetAddress = ""
+    @State private var loading = false
+    @State private var problem: String?
+    @State private var showRoutes = false
+    @State private var searchRank = 3
+
+    enum CPMode { case paper, points }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Import a crease pattern and mark the square paper area. Then add one or more reference points.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Button { showingImporter = true } label: {
+                            Label("Files / PDF", systemImage: "doc")
+                        }.buttonStyle(.bordered)
+                        Button { pasteImage() } label: {
+                            Label("Paste", systemImage: "doc.on.clipboard")
+                        }.buttonStyle(.bordered)
+                    }
+                    HStack {
+                        TextField("https://… image or PDF URL", text: $internetAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Load") { loadFromURL() }
+                            .disabled(loading || internetAddress.isEmpty)
+                    }
+                    if loading { ProgressView("Loading CP…") }
+                    if let problem { Text(problem).foregroundStyle(.red).font(.caption) }
+                    if let image {
+                        Text(sourceLabel).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
+                                          references: references, mode: mode, onTouch: handleTouch)
+                            .frame(height: 380)
+                            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                        if paperRegion == nil {
+                            Label(firstCorner == nil ?
+                                  "Tap the first corner of the paper square." :
+                                  "Tap the opposite corner to finish the paper square.",
+                                  systemImage: "viewfinder")
+                                .font(.subheadline)
+                        } else {
+                            HStack {
+                                Label("Paper area selected", systemImage: "checkmark.square")
+                                Spacer()
+                                Button("Redefine") {
+                                    paperRegion = nil; firstCorner = nil; references = []; mode = .paper
+                                }
+                            }.font(.subheadline)
+                            if mode == .paper {
+                                Button("Add reference points") { mode = .points }
+                                    .buttonStyle(.borderedProminent)
+                            } else {
+                                Text("Tap inside the outlined square to add points. Coordinates use its bottom-left corner as (0, 0).")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
+                                    HStack {
+                                        Text("Point \(index + 1)").fontWeight(.semibold)
+                                        Spacer()
+                                        Text(String(format: "X %.5f  ·  Y %.5f",
+                                                    reference.position.x, 1 - reference.position.y))
+                                            .monospacedDigit().font(.caption)
+                                        Button {
+                                            references.remove(at: index)
+                                        } label: { Image(systemName: "minus.circle") }
+                                            .accessibilityLabel("Remove point \(index + 1)")
+                                    }
+                                }
+                                HStack {
+                                    Button("Undo last") { _ = references.popLast() }
+                                        .disabled(references.isEmpty)
+                                    Button("Clear points", role: .destructive) { references.removeAll() }
+                                        .disabled(references.isEmpty)
+                                }.buttonStyle(.bordered)
+                                Picker("Search depth", selection: $searchRank) {
+                                    Text("Quick").tag(2)
+                                    Text("Balanced").tag(3)
+                                    Text("Deeper").tag(4)
+                                }.pickerStyle(.segmented)
+                                Button { showRoutes = true } label: {
+                                    Label("Solve \(references.count) point\(references.count == 1 ? "" : "s")",
+                                          systemImage: "sparkles")
+                                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(references.isEmpty)
+                            }
+                        }
+                    } else {
+                        Label("Choose an image or PDF, paste a copied image, or load an HTTPS URL.", systemImage: "square.dashed").font(.subheadline).foregroundStyle(.secondary).padding()
+                    }
+                    Text("Points in CP finds folding references for the points you select. It does not automatically infer the folding order of the entire crease pattern.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(16).frame(maxWidth: 700).frame(maxWidth: .infinity)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("Points in CP")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { DoneButton { dismiss() } }
+            }
+            .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.image, .pdf]) { result in
+                switch result {
+                case .success(let file):
+                    let granted = file.startAccessingSecurityScopedResource()
+                    defer { if granted { file.stopAccessingSecurityScopedResource() } }
+                    do { try decode(data: Data(contentsOf: file), name: file.lastPathComponent) }
+                    catch { problem = "Could not open file: \(error.localizedDescription)" }
+                case .failure(let error):
+                    problem = error.localizedDescription
+                }
+            }
+            .navigationDestination(isPresented: $showRoutes) {
+                CPPointsResultsView(points: references, rank: searchRank)
+            }
+        }
+    }
+
+    private func handleTouch(_ point: CGPoint) {
+        guard image != nil else { return }
+        problem = nil
+        if mode == .paper {
+            guard let firstCorner else {
+                self.firstCorner = point
+                return
+            }
+            let left = min(firstCorner.x, point.x)
+            let top = min(firstCorner.y, point.y)
+            let width = abs(firstCorner.x - point.x)
+            let height = abs(firstCorner.y - point.y)
+            guard width > 0.04, height > 0.04 else {
+                problem = "Select opposite corners of the paper, farther apart."
+                return
+            }
+            paperRegion = CGRect(x: left, y: top, width: width, height: height)
+            self.firstCorner = nil
+            references = []
+            mode = .points
+        } else if let paperRegion, paperRegion.contains(point) {
+            references.append(CPReference(position: CGPoint(
+                x: min(1, max(0, (point.x - paperRegion.minX) / paperRegion.width)),
+                y: min(1, max(0, (point.y - paperRegion.minY) / paperRegion.height)))))
+        }
+    }
+
+    private func pasteImage() {
+        if let pasted = UIPasteboard.general.image {
+            reset(with: pasted, name: "Clipboard image")
+        } else if let url = UIPasteboard.general.url {
+            internetAddress = url.absoluteString
+            loadFromURL()
+        } else if let text = UIPasteboard.general.string,
+                  let url = URL(string: text), url.scheme?.lowercased() == "https" {
+            internetAddress = text
+            loadFromURL()
+        } else {
+            problem = "Copy an image or an HTTPS image/PDF link before pasting."
+        }
+    }
+
+    private func loadFromURL() {
+        guard let url = URL(string: internetAddress),
+              url.scheme?.lowercased() == "https",
+              url.host != nil else {
+            problem = "Enter a valid HTTPS image or PDF URL."
+            return
+        }
+        loading = true; problem = nil
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 20
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    throw CPImportError.invalidResponse
+                }
+                try decode(data: data, name: url.lastPathComponent)
+            } catch {
+                problem = "Unable to load image/PDF: \(error.localizedDescription)"
+            }
+            loading = false
+        }
+    }
+
+    private enum CPImportError: LocalizedError {
+        case unsupported, invalidResponse, tooLarge
+        var errorDescription: String? {
+            switch self {
+            case .unsupported: return "This file is not a valid image or PDF."
+            case .invalidResponse: return "The server did not return a successful response."
+            case .tooLarge: return "Image/PDF is too large (20 MB maximum)."
+            }
+        }
+    }
+
+    private func decode(data: Data, name: String) throws {
+        guard data.count <= 20_000_000 else { throw CPImportError.tooLarge }
+        if let image = UIImage(data: data) {
+            reset(with: image, name: name)
+        } else if let document = PDFDocument(data: data),
+                  let page = document.page(at: 0) {
+            let size = page.bounds(for: .mediaBox).size
+            let factor = min(3, 2400 / max(size.width, size.height, 1))
+            reset(with: page.thumbnail(of: CGSize(width: size.width * factor,
+                                                   height: size.height * factor), for: .mediaBox),
+                  name: name + " · page 1")
+        } else {
+            throw CPImportError.unsupported
+        }
+    }
+
+    private func reset(with newImage: UIImage, name: String) {
+        image = newImage
+        sourceLabel = name
+        firstCorner = nil
+        paperRegion = nil
+        references = []
+        mode = .paper
+        problem = nil
+    }
+}
+
+private struct CPSelectionCanvas: View {
+    let image: UIImage
+    let region: CGRect?
+    let corner: CGPoint?
+    let references: [CPReference]
+    let mode: CPPointsView.CPMode
+    let onTouch: (CGPoint) -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            let bounds = geometry.size
+            let ratio = min(bounds.width / max(image.size.width, 1),
+                            bounds.height / max(image.size.height, 1))
+            let size = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
+            let origin = CGPoint(x: (bounds.width - size.width) / 2,
+                                 y: (bounds.height - size.height) / 2)
+            ZStack(alignment: .topLeading) {
+                Image(uiImage: image)
+                    .resizable().interpolation(.high)
+                    .frame(width: size.width, height: size.height)
+                    .position(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
+                if let corner {
+                    Circle().fill(.orange).frame(width: 12, height: 12)
+                        .position(x: origin.x + corner.x * size.width,
+                                  y: origin.y + corner.y * size.height)
+                }
+                if let region {
+                    Rectangle()
+                        .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [7, 4]))
+                        .frame(width: region.width * size.width, height: region.height * size.height)
+                        .position(x: origin.x + region.midX * size.width,
+                                  y: origin.y + region.midY * size.height)
+                    ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
+                        let p = reference.position
+                        Text("\(index + 1)")
+                            .font(.caption.bold()).foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .background(ink, in: Circle())
+                            .overlay(Circle().stroke(.white, lineWidth: 2))
+                            .position(x: origin.x + (region.minX + p.x * region.width) * size.width,
+                                      y: origin.y + (region.minY + p.y * region.height) * size.height)
+                    }
+                }
+            }
+            .frame(width: bounds.width, height: bounds.height)
+            .contentShape(Rectangle())
+            .highPriorityGesture(DragGesture(minimumDistance: 0).onEnded { event in
+                let point = CGPoint(x: (event.location.x - origin.x) / max(size.width, 1),
+                                    y: (event.location.y - origin.y) / max(size.height, 1))
+                guard (0...1).contains(point.x), (0...1).contains(point.y) else { return }
+                onTouch(point)
+            })
+        }
+        .clipped()
+        .accessibilityLabel("CP image. Select two corners of the paper, then tap to add numbered points.")
+    }
+}
+
+private struct CPPointsResultsView: View {
+    let points: [CPReference]
+    let rank: Int
+    var body: some View {
+        List {
+            Section {
+                Text("Each selected point is searched independently using the original ReferenceFinder engine. Open a point to see its full folding sequences.")
+                    .font(.subheadline)
+            }
+            ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
+                NavigationLink {
+                    CPPointRoutesView(index: index + 1, point: point, rank: rank)
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Point \(index + 1)").font(.headline)
+                        Text(String(format: "X %.5f · Y %.5f", point.position.x, 1 - point.position.y))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("CP folding routes")
+    }
+}
+
+private struct CPPointRoutesView: View {
+    let index: Int
+    let point: CPReference
+    let rank: Int
+    @StateObject private var model = SearchModel()
+    @State private var started = false
+
+    var body: some View {
+        List {
+            if model.isSearching {
+                ProgressView("Finding references for point \(index)…")
+                Button("Cancel search", role: .cancel) { model.cancel() }
+            } else if let error = model.error {
+                Text(error).foregroundStyle(.red)
+                Button("Retry") { model.search() }
+            } else if let solutions = model.response?.solutions {
+                if solutions.isEmpty {
+                    Text("No references found. Try a deeper search.")
+                }
+                ForEach(Array(solutions.enumerated()), id: \.offset) { route, solution in
+                    NavigationLink {
+                        SolutionView(solution: solution, number: route + 1,
+                                     input: model.lastInput ?? model.input)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Route \(route + 1) · \(solution.steps.count) diagrams").font(.headline)
+                            Text("Error \(String(format: "%.5f", solution.error)) · rank \(solution.rank)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("CP point \(index)")
+        .onAppear {
+            guard !started else { return }
+            started = true
+            model.input = SearchInput(
+                x: String(format: "%.8f", point.position.x),
+                y: String(format: "%.8f", 1 - point.position.y),
+                x2: "1", y2: "1/3", width: "1", height: "1",
+                line: false, rank: rank)
+            model.search()
+        }
+        .onDisappear { if model.isSearching { model.cancel() } }
+    }
 }
