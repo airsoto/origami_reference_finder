@@ -22,7 +22,7 @@ struct ContentView: View {
                             Text("Line").tag(true)
                         }.pickerStyle(.segmented)
                         PaperPreview(input: $model.input)
-                            .frame(height: 135)
+                            .frame(height: 260)
                         HStack {
                             Label(model.input.line ? "First point" : "Target point", systemImage: "scope")
                                 .font(.headline)
@@ -289,13 +289,23 @@ private struct PaperPreview: View {
                     ctx.draw(Text("X →").font(.caption.bold()).foregroundColor(ink), at: CGPoint(x: rect.midX, y: rect.maxY + 14))
                     ctx.draw(Text("Y ↑").font(.caption.bold()).foregroundColor(foldColor), at: CGPoint(x: rect.minX - 16, y: rect.midY))
                 }
-                Rectangle().fill(.clear).contentShape(Rectangle())
-                    .frame(width: rect.width, height: rect.height).position(x: rect.midX, y: rect.midY)
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { event in
-                        input.x = String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), min(width, max(0, event.location.x / scale)))
-                        input.y = String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), min(height, max(0, height - event.location.y / scale)))
-                    })
-            }.accessibilityElement(children: .ignore)
+            }
+            // Handle taps and continuous drags before the enclosing ScrollView.
+            // Use the entire preview's coordinate system, not a positioned
+            // overlay's local coordinates, to avoid offset/drift.
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { event in
+                        let localX = min(rect.maxX, max(rect.minX, event.location.x))
+                        let localY = min(rect.maxY, max(rect.minY, event.location.y))
+                        input.x = String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"),
+                                         (localX - rect.minX) / scale)
+                        input.y = String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"),
+                                         (rect.maxY - localY) / scale)
+                    }
+            )
+accessibilityElement(children: .ignore)
                 .accessibilityLabel("Paper preview. \(input.summary). Edit the X and Y fields to set exact coordinates.")
         }
     }
