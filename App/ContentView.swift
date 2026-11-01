@@ -584,7 +584,8 @@ import PDFKit
 
 private struct CPReference: Identifiable {
     let id = UUID()
-    let position: CGPoint // normalized coordinates within the selected CP area
+    var position: CGPoint // normalized top-left-origin paper coordinates
+    var endpoint: CGPoint? = nil // second endpoint for a line
 }
 
 private struct CPPointsView: View {
@@ -603,14 +604,18 @@ private struct CPPointsView: View {
     @State private var searchRank = 3
     @State private var editingCorner: Int?
     @State private var editingPoint: Int?
+    @State private var referenceKind: CPReferenceKind = .point
+    @State private var pendingLineStart: CGPoint?
+    @State private var editingEndpoint: Int?
 
     enum CPMode { case paper, points }
+    enum CPReferenceKind: String, CaseIterable { case point = "Point", line = "Line" }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Import a crease pattern and mark the square paper area. Then add one or more reference points.")
+                    Text("Import a crease pattern and mark the square paper area. Then add points or lines to solve.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     HStack(spacing: 10) {
                         Button { showingImporter = true } label: {
@@ -633,7 +638,7 @@ private struct CPPointsView: View {
                     if let problem { Text(problem).foregroundStyle(.red).font(.caption) }
                     if let image {
                         Text(sourceLabel).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        Label("Pinch to zoom and pan. Tap an orange corner or numbered point, then tap its new position.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
+                        Label("Pinch to zoom and pan. Tap to add; select a marker or line endpoint to reposition. Zoom for precision.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
                         CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
                                           references: references, mode: mode, onTouch: handleTouch)
                             .frame(height: 440)
@@ -648,7 +653,7 @@ private struct CPPointsView: View {
                             HStack {
                                 Label("Paper area selected", systemImage: "checkmark.square")
                                 Spacer()
-                                Button("Edit corners") { mode = .paper; editingCorner = nil; editingPoint = nil }
+                                Button("Edit corners") { mode = .paper; editingCorner = nil; editingPoint = nil; editingEndpoint = nil; pendingLineStart = nil }
                                 Button("Redefine") {
                                     paperRegion = nil; firstCorner = nil; references = []; mode = .paper
                                     editingCorner = nil; editingPoint = nil
@@ -661,28 +666,75 @@ private struct CPPointsView: View {
                                 Button("Finish paper adjustment") { mode = .points; editingCorner = nil }
                                     .buttonStyle(.borderedProminent)
                             } else {
-                                Text(editingPoint == nil ?
-                                     "Tap inside the square to add points. Tap a numbered marker to reposition it." :
-                                     "Point selected. Tap its new position.")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
-                                    HStack {
-                                        Text("Point \(index + 1)").fontWeight(.semibold)
-                                        Spacer()
-                                        Text(String(format: "X %.5f  ·  Y %.5f",
-                                                    reference.position.x, 1 - reference.position.y))
-                                            .monospacedDigit().font(.caption)
-                                        Button {
-                                            references.remove(at: index)
-                                        } label: { Image(systemName: "minus.circle") }
-                                            .accessibilityLabel("Remove point \(index + 1)")
+                                Picker("Reference", selection: $referenceKind) {
+                                    ForEach(CPReferenceKind.allCases, id: \.self) { kind in
+                                        Text(kind.rawValue).tag(kind)
                                     }
+                                }.pickerStyle(.segmented)
+                                Text(editingPoint != nil ? "Tap a new position for the selected handle." :
+                                     referenceKind == .line ? (pendingLineStart == nil ?
+                                     "Tap the first line endpoint, then the second." :
+                                     "Tap the second endpoint to complete the line.") :
+                                     "Tap to add a point. Tap a marker to edit it.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                if pendingLineStart != nil {
+                                    Button("Cancel unfinished line") { pendingLineStart = nil }
+                                }
+                                ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text("\(reference.endpoint == nil ? "Point" : "Line") \(index + 1)").fontWeight(.semibold)
+                                            Spacer()
+                                            Button {
+                                                references.remove(at: index)
+                                                editingPoint = nil
+                                                editingEndpoint = nil
+                                            } label: { Image(systemName: "minus.circle") }
+                                        }
+                                        Text(String(format: "X1 %.5f · Y1 %.5f", reference.position.x, 1 - reference.position.y))
+                                            .font(.caption.monospacedDigit())
+                                        if let end = reference.endpoint {
+                                            Text(String(format: "X2 %.5f · Y2 %.5f", end.x, 1 - end.y))
+                                                .font(.caption.monospacedDigit())
+                                        }
+                                        HStack {
+                                            Button("Move start") { editingPoint = index; editingEndpoint = 0 }
+                                            if reference.endpoint != nil {
+                                                Button("Move end") { editingPoint = index; editingEndpoint = 1 }
+                                            }
+                                        }.font(.caption).buttonStyle(.bordered)
+                                        HStack {
+                                            ForEach(0..<(reference.endpoint == nil ? 2 : 4), id: \.self) { coordinate in
+                                                let isEnd = coordinate >= 2
+                                                let isX = coordinate % 2 == 0
+                                                let value = isEnd ? (reference.endpoint ?? .zero) : reference.position
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text("\(isX ? "X" : "Y")\(isEnd ? "2" : "1")").font(.caption2)
+                                                    TextField("0…1", text: Binding(
+                                                        get: { String(format: "%.5f", isX ? value.x : 1 - value.y) },
+                                                        set: { raw in
+                                                            guard let n = Double(raw.replacingOccurrences(of: ",", with: ".")),
+                                                                  n.isFinite, (0...1).contains(n),
+                                                                  references.indices.contains(index) else { return }
+                                                            var p = isEnd ? (references[index].endpoint ?? .zero) : references[index].position
+                                                            if isX { p.x = n } else { p.y = 1 - n }
+                                                            if isEnd { references[index].endpoint = p }
+                                                            else { references[index].position = p }
+                                                        }))
+                                                        .keyboardType(.decimalPad)
+                                                        .textFieldStyle(.roundedBorder)
+                                                        .font(.caption.monospacedDigit())
+                                                }
+                                            }
+                                        }
+                                    }.padding(8).background(.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
                                 }
                                 HStack {
-                                    Button("Undo last") { _ = references.popLast() }
-                                        .disabled(references.isEmpty)
-                                    Button("Clear points", role: .destructive) { references.removeAll() }
-                                        .disabled(references.isEmpty)
+                                    Button("Undo last") { _ = references.popLast(); pendingLineStart = nil }
+                                        .disabled(references.isEmpty && pendingLineStart == nil)
+                                    Button("Clear references", role: .destructive) {
+                                        references.removeAll(); pendingLineStart = nil
+                                    }.disabled(references.isEmpty && pendingLineStart == nil)
                                 }.buttonStyle(.bordered)
                                 Picker("Search depth", selection: $searchRank) {
                                     Text("Quick").tag(2)
@@ -800,19 +852,36 @@ private struct CPPointsView: View {
                 y: min(1, max(0, (point.y - paperRegion.minY) / paperRegion.height)))
             if let selected = editingPoint {
                 guard paperRegion.contains(point) else { problem = "Place the point inside the square."; return }
-                references[selected] = CPReference(position: normalized)
+                if editingEndpoint == 1 { references[selected].endpoint = normalized }
+                else { references[selected].position = normalized }
                 editingPoint = nil
+                editingEndpoint = nil
                 return
             }
-            if let selected = references.indices.first(where: {
-                let p = references[$0].position
-                let px = paperRegion.minX + p.x * paperRegion.width
-                let py = paperRegion.minY + p.y * paperRegion.height
-                return hypot(px - point.x, py - point.y) < 0.025
-            }) {
-                editingPoint = selected
+            // Select the closest point or either line endpoint.
+            let handles = references.indices.flatMap { i -> [(Int, Int, CGPoint)] in
+                var result = [(i, 0, references[i].position)]
+                if let end = references[i].endpoint { result.append((i, 1, end)) }
+                return result
+            }
+            if let closest = handles.min(by: { lhs, rhs in
+                hypot(lhs.2.x - normalized.x, lhs.2.y - normalized.y) <
+                hypot(rhs.2.x - normalized.x, rhs.2.y - normalized.y)
+            }), hypot(closest.2.x - normalized.x, closest.2.y - normalized.y) < 0.035 {
+                editingPoint = closest.0
+                editingEndpoint = closest.1
             } else if paperRegion.contains(point) {
-                references.append(CPReference(position: normalized))
+                if referenceKind == .point {
+                    references.append(CPReference(position: normalized))
+                } else if let start = pendingLineStart {
+                    guard hypot(start.x - normalized.x, start.y - normalized.y) > 0.0001 else {
+                        problem = "Choose two different endpoints."; return
+                    }
+                    references.append(CPReference(position: start, endpoint: normalized))
+                    pendingLineStart = nil
+                } else {
+                    pendingLineStart = normalized
+                }
             }
         }
     }
@@ -889,6 +958,7 @@ private struct CPPointsView: View {
         firstCorner = nil
         paperRegion = nil
         references = []
+        pendingLineStart = nil
         mode = .paper
         editingCorner = nil
         editingPoint = nil
@@ -924,7 +994,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
         scroll.setImageIfNeeded(image)
         scroll.paperView.region = region
         scroll.paperView.corner = corner
-        scroll.paperView.references = references.enumerated().map { ($0.offset + 1, $0.element.position) }
+        scroll.paperView.references = references.enumerated().map { ($0.offset + 1, $0.element.position, $0.element.endpoint) }
         scroll.paperView.setNeedsDisplay()
     }
 
@@ -995,7 +1065,7 @@ private final class CPAnnotatedPaperView: UIView {
     var image: UIImage?
     var region: CGRect?
     var corner: CGPoint?
-    var references: [(Int, CGPoint)] = []
+    var references: [(Int, CGPoint, CGPoint?)] = []
 
     override func draw(_ rect: CGRect) {
         guard let image, let context = UIGraphicsGetCurrentContext() else { return }
@@ -1020,7 +1090,18 @@ private final class CPAnnotatedPaperView: UIView {
             context.setFillColor(UIColor.systemOrange.cgColor)
             context.fillEllipse(in: CGRect(x: handle.x - 6, y: handle.y - 6, width: 12, height: 12))
         }
-        for (number, point) in references {
+        for (number, point, endpoint) in references {
+            if let endpoint {
+                let ex = (region.minX + endpoint.x * region.width) * bounds.width
+                let ey = (region.minY + endpoint.y * region.height) * bounds.height
+                context.setStrokeColor(UIColor.systemPurple.cgColor)
+                context.setLineWidth(2.5)
+                context.move(to: CGPoint(x: (region.minX + point.x * region.width) * bounds.width, y: (region.minY + point.y * region.height) * bounds.height))
+                context.addLine(to: CGPoint(x: ex, y: ey))
+                context.strokePath()
+                context.setFillColor(UIColor.systemPurple.cgColor)
+                context.fillEllipse(in: CGRect(x: ex - 7, y: ey - 7, width: 14, height: 14))
+            }
             let x = (region.minX + point.x * region.width) * bounds.width
             let y = (region.minY + point.y * region.height) * bounds.height
             let marker = CGRect(x: x - 12, y: y - 12, width: 24, height: 24)
@@ -1059,7 +1140,7 @@ private struct CPPointsResultsView: View {
                             Label("\(columns) columns", systemImage: "square.grid.2x2")
                         }
                     }
-                    Text("Each point is solved independently. Open a folding route to see the full numbered sequence.")
+                    Text("Each point or line is solved independently. Open a route for its numbered folding sequence.")
                         .font(.caption).foregroundStyle(.secondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
                                               count: max(1, min(4, columns))),
@@ -1091,6 +1172,10 @@ private struct CPPointResultCard: View {
             Text("POINT \(index)").font(.headline).foregroundStyle(ink)
             Text(String(format: "X %.5f\nY %.5f", point.position.x, 1 - point.position.y))
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            if let end = point.endpoint {
+                Text(String(format: "X2 %.5f\\nY2 %.5f", end.x, 1 - end.y))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
             if model.isSearching {
                 ProgressView("Searching…").font(.caption)
             } else if let error = model.error {
@@ -1130,8 +1215,10 @@ private struct CPPointResultCard: View {
             model.input = SearchInput(
                 x: String(format: "%.10f", point.position.x),
                 y: String(format: "%.10f", 1 - point.position.y),
-                x2: "1", y2: "1/3", width: "1", height: "1",
-                line: false, rank: rank)
+                x2: String(format: "%.10f", point.endpoint?.x ?? 1),
+                y2: String(format: "%.10f", 1 - (point.endpoint?.y ?? (2.0 / 3.0))),
+                width: "1", height: "1",
+                line: point.endpoint != nil, rank: rank)
             model.search()
         }
     }
