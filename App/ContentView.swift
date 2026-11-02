@@ -898,6 +898,13 @@ private struct CPPointsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { DoneButton { dismiss() } }
             }
+            .confirmationDialog("Join endpoints?", isPresented: $showingJoinEndpoints,
+                                titleVisibility: .visible) {
+                Button("Join endpoints") { confirmEndpointJoin() }
+                Button("Keep separate", role: .cancel) { snapCandidate = nil }
+            } message: {
+                Text("Snap these line endpoints together so both lines share the same starting point.")
+            }
             .alert("Save CP", isPresented: $askToSave) {
                 TextField("Project name", text: $cpProjectName)
                 Button("Save") { saveNamedCP() }
