@@ -695,6 +695,12 @@ private struct CPPointsView: View {
                                         Text(action.rawValue).tag(action)
                                     }
                                 }.pickerStyle(.segmented)
+                                    .onChange(of: placementMode) { _ in
+                                        editingPoint = nil
+                                        editingEndpoint = nil
+                                        movingLineAnchor = nil
+                                        pendingLineStart = nil
+                                    }
                                 Text(editingPoint != nil ?
                                      "Tap a new destination or press and drag the selected marker." :
                                      placementMode == .edit ?
@@ -705,6 +711,13 @@ private struct CPPointsView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                                 if pendingLineStart != nil {
                                     Button("Cancel unfinished line") { pendingLineStart = nil }
+                                }
+                                if editingPoint != nil {
+                                    Button("Cancel reposition") {
+                                        editingPoint = nil
+                                        editingEndpoint = nil
+                                        movingLineAnchor = nil
+                                    }.buttonStyle(.bordered)
                                 }
                                 ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
                                     VStack(alignment: .leading, spacing: 6) {
@@ -771,7 +784,12 @@ private struct CPPointsView: View {
                                     }.padding(8).background(.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
                                 }
                                 HStack {
-                                    Button("Undo last") { _ = references.popLast(); pendingLineStart = nil }
+                                    Button("Undo last") {
+                                        if pendingLineStart != nil { pendingLineStart = nil }
+                                        else { _ = references.popLast() }
+                                        editingPoint = nil
+                                        editingEndpoint = nil
+                                    }
                                         .disabled(references.isEmpty && pendingLineStart == nil)
                                     Button("Clear references", role: .destructive) {
                                         references.removeAll(); pendingLineStart = nil
