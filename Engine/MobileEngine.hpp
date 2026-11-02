@@ -6,6 +6,7 @@ struct Request {
   std::string width = "1", height = "1";
   bool line = false;
   int rank = 4;
+  int maxReferences = 100000;
 };
 // Calls are serialized internally: the upstream engine has process-wide state.
 std::string solve(const Request& request);
