@@ -674,6 +674,19 @@ private struct CPPointsView: View {
                     Text("Import a crease pattern and mark the square paper area. Then add points or lines to solve.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     HStack(spacing: 10) {
+                        Button { askToSave = true } label: {
+                            Label("Save CP", systemImage: "square.and.arrow.down")
+                        }.buttonStyle(.bordered).disabled(image == nil)
+                        Menu {
+                            Button("Last session") { loadSession(CPSessionStore.load("draft")) }
+                            ForEach(cpSaved) { item in
+                                Button(item.name) { loadSession(CPSessionStore.load(item.id)) }
+                            }
+                        } label: {
+                            Label("Open saved", systemImage: "folder")
+                        }
+                    }
+                    HStack(spacing: 10) {
                         Button { showingImporter = true } label: {
                             Label("Files / PDF", systemImage: "doc")
                         }.buttonStyle(.bordered)
