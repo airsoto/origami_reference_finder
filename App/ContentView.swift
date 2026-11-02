@@ -875,10 +875,37 @@ private struct CPPointsView: View {
                 y: min(1, max(0, (point.y - paperRegion.minY) / paperRegion.height)))
             if let selected = editingPoint {
                 guard paperRegion.contains(point) else { problem = "Place the point inside the square."; return }
-                if editingEndpoint == 1 { references[selected].endpoint = normalized }
-                else { references[selected].position = normalized }
+                if editingEndpoint == 2, let end = references[selected].endpoint {
+                    let start = references[selected].position
+                    let mid = movingLineAnchor ?? CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+                    let dx = normalized.x - mid.x
+                    let dy = normalized.y - mid.y
+                    let movedStart = CGPoint(x: start.x + dx, y: start.y + dy)
+                    let movedEnd = CGPoint(x: end.x + dx, y: end.y + dy)
+                    guard [movedStart, movedEnd].allSatisfy({ (0...1).contains($0.x) && (0...1).contains($0.y) }) else {
+                        problem = "Keep the entire line inside the paper."
+                        return
+                    }
+                    references[selected].position = movedStart
+                    references[selected].endpoint = movedEnd
+                } else if editingEndpoint == 1 {
+                    guard hypot(references[selected].position.x - normalized.x,
+                                references[selected].position.y - normalized.y) > 0.0001 else {
+                        problem = "Line endpoints must differ."
+                        return
+                    }
+                    references[selected].endpoint = normalized
+                } else {
+                    if let end = references[selected].endpoint,
+                       hypot(end.x - normalized.x, end.y - normalized.y) <= 0.0001 {
+                        problem = "Line endpoints must differ."
+                        return
+                    }
+                    references[selected].position = normalized
+                }
                 editingPoint = nil
                 editingEndpoint = nil
+                movingLineAnchor = nil
                 return
             }
             // Select the closest point or either line endpoint.
