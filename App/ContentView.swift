@@ -1095,6 +1095,69 @@ private struct CPPointsView: View {
         }
     }
 
+    private func endpointPosition(_ index: Int, _ end: Int) -> CGPoint? {
+        guard references.indices.contains(index) else { return nil }
+        return end == 0 ? references[index].position : references[index].endpoint
+    }
+
+    private func updateConnectedEndpoint(line: Int, end: Int, to target: CGPoint) {
+        guard let previous = endpointPosition(line, end) else { return }
+        // Previously joined endpoints have identical coordinates; move them
+        // together so the join remains intact during later edits.
+        for i in references.indices {
+            guard references[i].endpoint != nil else { continue }
+            if hypot(references[i].position.x - previous.x,
+                     references[i].position.y - previous.y) < 0.000001 {
+                if let opposite = references[i].endpoint,
+                   hypot(opposite.x - target.x, opposite.y - target.y) > 0.0001 {
+                    references[i].position = target
+                }
+            }
+            if let oldEnd = references[i].endpoint,
+               hypot(oldEnd.x - previous.x, oldEnd.y - previous.y) < 0.000001,
+               hypot(references[i].position.x - target.x,
+                     references[i].position.y - target.y) > 0.0001 {
+                references[i].endpoint = target
+            }
+        }
+    }
+
+    private func offerEndpointJoin(for index: Int, end: Int) {
+        guard let source = endpointPosition(index, end),
+              references.indices.contains(index),
+              references[index].endpoint != nil else { return }
+        let choices: [(Int, Int, CGPoint)] = references.indices
+            .filter { $0 != index && references[$0].endpoint != nil }
+            .flatMap { other -> [(Int, Int, CGPoint)] in
+                [(other, 0, references[other].position),
+                 (other, 1, references[other].endpoint!)]
+            }
+        guard let nearest = choices.min(by: {
+            hypot($0.2.x - source.x, $0.2.y - source.y) <
+            hypot($1.2.x - source.x, $1.2.y - source.y)
+        }), hypot(nearest.2.x - source.x, nearest.2.y - source.y) < 0.025,
+           hypot(nearest.2.x - source.x, nearest.2.y - source.y) > 0.00000001 else { return }
+        // Do not collapse a line to a zero-length segment.
+        let opposite = endpointPosition(index, end == 0 ? 1 : 0)!
+        guard hypot(opposite.x - nearest.2.x, opposite.y - nearest.2.y) > 0.0001 else { return }
+        snapCandidate = CPSnapCandidate(movingIndex: index, movingEnd: end,
+                                        fixedIndex: nearest.0, fixedEnd: nearest.1)
+        showingJoinEndpoints = true
+    }
+
+    private func confirmEndpointJoin() {
+        guard let candidate = snapCandidate,
+              let target = endpointPosition(candidate.fixedIndex, candidate.fixedEnd),
+              endpointPosition(candidate.movingIndex, candidate.movingEnd) != nil else {
+            snapCandidate = nil
+            return
+        }
+        updateConnectedEndpoint(line: candidate.movingIndex,
+                                end: candidate.movingEnd, to: target)
+        snapCandidate = nil
+        queueCPDraft()
+    }
+
     private func handleDrag(_ p: CGPoint, _ phase: CPDragPhase) {
         guard mode == .points, placementMode == .edit, let region = paperRegion else { return }
         let n = CGPoint(x: (p.x - region.minX) / region.width,
