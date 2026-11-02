@@ -28,6 +28,8 @@ struct SearchInput: Codable, Equatable {
     var height = "1"
     var line = false
     var rank = 3
+    // Optional for compatibility with older locally saved searches.
+    var maxReferences: Int? = nil
     var summary: String { line ? "Line (\(x), \(y)) → (\(x2), \(y2))" : "Point (\(x), \(y))" }
 }
 
@@ -61,7 +63,7 @@ final class SearchModel: ObservableObject {
         Self.engineQueue.async {
             let result = RFBridge.search(x: request.x, y: request.y, x2: request.x2,
                 y2: request.y2, width: request.width, height: request.height,
-                line: request.line, rank: request.rank)
+                line: request.line, rank: request.rank, maxReferences: request.maxReferences ?? 100000)
             let decoded = try? JSONDecoder().decode(SearchResponse.self, from: Data(result.utf8))
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
