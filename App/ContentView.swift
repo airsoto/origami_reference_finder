@@ -1529,7 +1529,8 @@ private struct CPSelectionCanvas: UIViewRepresentable {
             let normalized = CGPoint(x: position.x / paper.bounds.width, y: position.y / paper.bounds.height)
             let scroll = paper.superview as? CPZoomScrollView
             let zoom = max(scroll?.zoomScale ?? 1, 1)
-            let squareWidth = max(1, paper.bounds.width * (paper as? CPAnnotatedPaperView).map { $0.region?.width ?? 1 }! * zoom)
+            let regionWidth = (paper as? CPAnnotatedPaperView)?.region?.width ?? 1
+            let squareWidth = max(CGFloat(1), paper.bounds.width * regionWidth * zoom)
             // Touch radius is expressed as a fraction of the square paper width.
             // 28 screen points remain comfortable even at high zoom levels.
             let snapRadius = min(0.085, max(0.008, 28 / squareWidth))
