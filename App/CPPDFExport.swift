@@ -30,6 +30,9 @@ enum CPPDFExporter {
     private static let gap: CGFloat = 12
     private static let tile: CGFloat = (width - 2 * margin - 2 * gap) / 3
     private static let rowHeight: CGFloat = tile + 21
+    private static let lineColors: [UIColor] = [.systemPurple, .systemBlue, .systemRed,
+                                                 .systemGreen, .systemOrange, .systemPink,
+                                                 .systemTeal, .systemIndigo]
 
     static func create(image: UIImage, region: CGRect,
                        references: [CPReference], solutions: [[FoldSolution]],
@@ -80,7 +83,8 @@ enum CPPDFExporter {
                     let diagram: UIImage
                     if stepIndex == route.steps.count - 1, let end = reference.endpoint {
                         diagram = highlightSegment(on: originalDiagram,
-                                                  from: reference.position, to: end)
+                                                  from: reference.position, to: end,
+                                                  color: lineColors[(lineNumber - 1) % lineColors.count])
                     } else {
                         diagram = originalDiagram
                     }
@@ -155,7 +159,8 @@ enum CPPDFExporter {
     // Draw exactly the finite endpoint-to-endpoint target segment, never the
     // infinitely extended construction line.
     private static func highlightSegment(on original: UIImage,
-                                         from start: CGPoint, to end: CGPoint) -> UIImage {
+                                         from start: CGPoint, to end: CGPoint,
+                                         color: UIColor) -> UIImage {
         let canvasSize = original.size
         let scale = min(canvasSize.width, canvasSize.height)
         guard scale > 0 else { return original }
@@ -174,11 +179,11 @@ enum CPPDFExporter {
             path.addLine(to: b)
             path.lineWidth = max(2, scale * 0.007)
             path.lineCapStyle = .round
-            UIColor.systemPurple.withAlphaComponent(0.9).setStroke()
+            color.withAlphaComponent(0.90).setStroke()
             path.stroke()
             for marker in [a, b] {
                 let radius = max(3, scale * 0.010)
-                UIColor.systemPurple.setFill()
+                color.setFill()
                 UIBezierPath(ovalIn: CGRect(x: marker.x - radius, y: marker.y - radius,
                                             width: radius * 2, height: radius * 2)).fill()
             }
@@ -316,10 +321,10 @@ struct CPPDFPreviewView: View {
                 .navigationTitle("CP PDF preview")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .navigationBarLeading) {
                         Button("Done") { dismiss() }
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         ShareLink(item: url) {
                             Label("Share / Save", systemImage: "square.and.arrow.up")
                         }
