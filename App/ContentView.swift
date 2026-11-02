@@ -675,6 +675,8 @@ private struct CPPointsView: View {
     @State private var showingJoinEndpoints = false
     @State private var dragStartLocation: CGPoint?
     @State private var dragMoved = false
+    @State private var dragFingerOffset: CGPoint = .zero
+    @State private var touchSnapRadius: CGFloat = 0.055
     enum CPPlacementMode: String, CaseIterable { case add = "Add", edit = "Move" }
 
     enum CPMode { case paper, points }
@@ -1180,11 +1182,11 @@ private struct CPPointsView: View {
     // Find the closest end of another line. Allow exact coincidence: a
     // previously blocked zero-distance match is a valid join candidate.
     // The radius is measured in normalized paper coordinates.
-    private func closestEndpointJoin(for index: Int, end: Int) -> CPSnapCandidate? {
+    private func closestEndpointJoin(for index: Int, end: Int, radius: CGFloat = 0.055) -> CPSnapCandidate? {
         guard let source = endpointPosition(index, end),
               references.indices.contains(index),
               references[index].endpoint != nil else { return nil }
-        let threshold = 0.055
+        let threshold = radius
         var best: (index: Int, end: Int, distance: CGFloat)?
         for other in references.indices where other != index {
             guard let otherEnd = references[other].endpoint else { continue }
@@ -1229,24 +1231,35 @@ private struct CPPointsView: View {
         queueCPDraft()
     }
 
-    private func handleDrag(_ p: CGPoint, _ phase: CPDragPhase) {
+    private func handleDrag(_ p: CGPoint, _ phase: CPDragPhase, _ screenRadius: CGFloat) {
         guard mode == .points, placementMode == .edit, let region = paperRegion else { return }
         let n = CGPoint(x: (p.x - region.minX) / region.width,
                         y: (p.y - region.minY) / region.height)
+        touchSnapRadius = screenRadius
         switch phase {
         case .began:
             nearbyJoin = nil
+            dragFingerOffset = .zero
             let choices = references.indices.flatMap { i -> [(Int, Int, CGPoint)] in
                 var parts = [(i, 0, references[i].position)]
                 if let end = references[i].endpoint { parts.append((i, 1, end)) }
                 return parts
             }
-            if let nearest = choices.min(by: {
-                hypot($0.2.x - n.x, $0.2.y - n.y) < hypot($1.2.x - n.x, $1.2.y - n.y)
-            }), hypot(nearest.2.x - n.x, nearest.2.y - n.y) < 0.07 {
+            // Prefer the endpoint already chosen with Move start / Move end.
+            // Its hit area is wider than the tiny marker drawn on screen.
+            let preferred = choices.first {
+                $0.0 == editingPoint && $0.1 == editingEndpoint &&
+                hypot($0.2.x - n.x, $0.2.y - n.y) < screenRadius * 2
+            }
+            let nearest = preferred ?? choices.min(by: {
+                hypot($0.2.x - n.x, $0.2.y - n.y) <
+                hypot($1.2.x - n.x, $1.2.y - n.y)
+            })
+            if let nearest, hypot(nearest.2.x - n.x, nearest.2.y - n.y) < screenRadius * 1.7 {
                 editingPoint = nearest.0
                 editingEndpoint = nearest.1
                 dragStartLocation = nearest.2
+                dragFingerOffset = CGPoint(x: nearest.2.x - n.x, y: nearest.2.y - n.y)
                 dragMoved = false
             } else {
                 editingPoint = nil
@@ -1254,7 +1267,8 @@ private struct CPPointsView: View {
             }
         case .changed:
             guard let i = editingPoint, references.indices.contains(i) else { return }
-            let value = CGPoint(x: min(1, max(0, n.x)), y: min(1, max(0, n.y)))
+            let value = CGPoint(x: min(1, max(0, n.x + dragFingerOffset.x)),
+                                y: min(1, max(0, n.y + dragFingerOffset.y)))
             if let origin = dragStartLocation,
                hypot(origin.x - value.x, origin.y - value.y) > 0.002 {
                 dragMoved = true
@@ -1274,7 +1288,11 @@ private struct CPPointsView: View {
                 }
             }
             if let part = editingEndpoint, part < 2, references[i].endpoint != nil {
-                nearbyJoin = closestEndpointJoin(for: i, end: part)
+                let wasNearby = nearbyJoin != nil
+                nearbyJoin = closestEndpointJoin(for: i, end: part, radius: screenRadius)
+                if !wasNearby && nearbyJoin != nil {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                }
             } else {
                 nearbyJoin = nil
             }
@@ -1286,13 +1304,17 @@ private struct CPPointsView: View {
                     snapCandidate = candidate
                     showingJoinEndpoints = true
                 } else {
-                    offerEndpointJoin(for: i, end: end)
+                    if let candidate = closestEndpointJoin(for: i, end: end, radius: screenRadius) {
+                        snapCandidate = candidate
+                        showingJoinEndpoints = true
+                    }
                 }
             }
             nearbyJoin = nil
             editingPoint = nil
             editingEndpoint = nil
             dragStartLocation = nil
+            dragFingerOffset = .zero
             dragMoved = false
         }
     }
