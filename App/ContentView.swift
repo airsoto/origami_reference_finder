@@ -1478,7 +1478,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
     let moving: Bool
     let snapTarget: CGPoint?
     let onTouch: (CGPoint) -> Void
-    let onDrag: (CGPoint, CPDragPhase) -> Void
+    let onDrag: (CGPoint, CPDragPhase, CGFloat) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onTouch: onTouch, onDrag: onDrag) }
 
@@ -1518,8 +1518,8 @@ private struct CPSelectionCanvas: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
         var onTouch: (CGPoint) -> Void
-        var onDrag: (CGPoint, CPDragPhase) -> Void
-        init(onTouch: @escaping (CGPoint) -> Void, onDrag: @escaping (CGPoint, CPDragPhase) -> Void) {
+        var onDrag: (CGPoint, CPDragPhase, CGFloat) -> Void
+        init(onTouch: @escaping (CGPoint) -> Void, onDrag: @escaping (CGPoint, CPDragPhase, CGFloat) -> Void) {
             self.onTouch = onTouch
             self.onDrag = onDrag
         }
@@ -1527,10 +1527,16 @@ private struct CPSelectionCanvas: UIViewRepresentable {
             guard let paper = gesture.view, paper.bounds.width > 0, paper.bounds.height > 0 else { return }
             let position = gesture.location(in: paper)
             let normalized = CGPoint(x: position.x / paper.bounds.width, y: position.y / paper.bounds.height)
+            let scroll = paper.superview as? CPZoomScrollView
+            let zoom = max(scroll?.zoomScale ?? 1, 1)
+            let squareWidth = max(1, paper.bounds.width * (paper as? CPAnnotatedPaperView).map { $0.region?.width ?? 1 }! * zoom)
+            // Touch radius is expressed as a fraction of the square paper width.
+            // 28 screen points remain comfortable even at high zoom levels.
+            let snapRadius = min(0.085, max(0.008, 28 / squareWidth))
             switch gesture.state {
-            case .began: onDrag(normalized, .began)
-            case .changed: onDrag(normalized, .changed)
-            case .ended, .cancelled, .failed: onDrag(normalized, .ended)
+            case .began: onDrag(normalized, .began, snapRadius)
+            case .changed: onDrag(normalized, .changed, snapRadius)
+            case .ended, .cancelled, .failed: onDrag(normalized, .ended, snapRadius)
             default: break
             }
         }
