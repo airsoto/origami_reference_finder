@@ -631,7 +631,7 @@ private enum CPSessionStore {
     }
 }
 
-private struct CPReference: Identifiable, Equatable {
+struct CPReference: Identifiable, Equatable {
     let id = UUID()
     var position: CGPoint // normalized top-left-origin paper coordinates
     var endpoint: CGPoint? = nil // second endpoint for a line
@@ -913,7 +913,8 @@ private struct CPPointsView: View {
                 }
             }
             .navigationDestination(isPresented: $showRoutes) {
-                CPPointsResultsView(points: references, rank: searchRank, maxReferences: cpLibrarySize)
+                CPPointsResultsView(points: references, rank: searchRank, maxReferences: cpLibrarySize,
+                                    image: image, region: paperRegion, title: sourceLabel)
             }
         }
     }
@@ -1471,7 +1472,54 @@ private struct CPPointsResultsView: View {
     let points: [CPReference]
     let rank: Int
     let maxReferences: Int
+    let image: UIImage?
+    let region: CGRect?
+    let title: String
+    @State private var exportURL: URL?
+    @State private var exportBusy = false
+    @State private var exportError: String?
     @AppStorage("origami.cp.columns") private var columns = 1
+    @MainActor
+    private func exportToPDF() async {
+        guard let image, let region else { return }
+        exportBusy = true
+        exportError = nil
+        exportURL = nil
+        let requests = points.map { item -> SearchInput in
+            SearchInput(x: String(format: "%.10f", item.position.x),
+                        y: String(format: "%.10f", 1 - item.position.y),
+                        x2: String(format: "%.10f", item.endpoint?.x ?? 1),
+                        y2: String(format: "%.10f", 1 - (item.endpoint?.y ?? (2.0 / 3.0))),
+                        width: "1", height: "1", line: item.endpoint != nil,
+                        rank: rank, maxReferences: maxReferences)
+        }
+        do {
+            let all: [[FoldSolution]] = try await Task.detached(priority: .userInitiated) {
+                var output: [[FoldSolution]] = []
+                for request in requests {
+                    let raw = RFBridge.search(x: request.x, y: request.y,
+                        x2: request.x2, y2: request.y2,
+                        width: request.width, height: request.height,
+                        line: request.line, rank: request.rank,
+                        maxReferences: request.maxReferences ?? 100000)
+                    let response = try JSONDecoder().decode(SearchResponse.self, from: Data(raw.utf8))
+                    if let error = response.error {
+                        throw NSError(domain: "CP PDF", code: 1,
+                                      userInfo: [NSLocalizedDescriptionKey: error])
+                    }
+                    output.append(response.solutions ?? [])
+                }
+                return output
+            }.value
+            exportURL = try await CPPDFExporter.create(image: image, region: region,
+                                                       references: points, solutions: all,
+                                                       title: title)
+        } catch {
+            exportError = "Could not export PDF: \(error.localizedDescription)"
+        }
+        exportBusy = false
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
@@ -1490,6 +1538,19 @@ private struct CPPointsResultsView: View {
                             Label("\(columns) columns", systemImage: "square.grid.2x2")
                         }
                     }
+                    HStack {
+                        Button { Task { await exportToPDF() } } label: {
+                            Label(exportBusy ? "Preparing PDF…" : "Export PDF", systemImage: "doc.richtext")
+                        }
+                        .disabled(exportBusy || image == nil || region == nil || points.isEmpty)
+                        if exportBusy { ProgressView() }
+                        if let exportURL {
+                            ShareLink(item: exportURL) {
+                                Label("Share / Save PDF", systemImage: "square.and.arrow.up")
+                            }
+                        }
+                    }.buttonStyle(.borderedProminent)
+                    if let exportError { Text(exportError).foregroundStyle(.red).font(.caption) }
                     Text("Each point or line is solved independently. Open a route for its numbered folding sequence.")
                         .font(.caption).foregroundStyle(.secondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
