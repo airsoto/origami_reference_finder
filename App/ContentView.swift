@@ -582,6 +582,16 @@ struct DiagramView: UIViewRepresentable {
 import UniformTypeIdentifiers
 import PDFKit
 
+private enum CPReferencePalette {
+    static let colors: [UIColor] = [
+        .systemPurple, .systemBlue, .systemRed, .systemGreen,
+        .systemOrange, .systemPink, .systemTeal, .systemIndigo
+    ]
+    static func lineColor(_ number: Int) -> UIColor {
+        colors[(max(1, number) - 1) % colors.count]
+    }
+}
+
 private struct CPReference: Identifiable {
     let id = UUID()
     var position: CGPoint // normalized top-left-origin paper coordinates
@@ -607,6 +617,7 @@ private struct CPPointsView: View {
     @State private var referenceKind: CPReferenceKind = .point
     @State private var pendingLineStart: CGPoint?
     @State private var editingEndpoint: Int?
+    @State private var movingLineAnchor: CGPoint?
 
     enum CPMode { case paper, points }
     enum CPReferenceKind: String, CaseIterable { case point = "Point", line = "Line" }
@@ -671,7 +682,7 @@ private struct CPPointsView: View {
                                         Text(kind.rawValue).tag(kind)
                                     }
                                 }.pickerStyle(.segmented)
-                                Text(editingPoint != nil ? "Tap a new position for the selected handle." :
+                                Text(editingPoint != nil ? (editingEndpoint == 2 ? "Tap the new center of the line." : "Tap a new position for the selected handle.") :
                                      referenceKind == .line ? (pendingLineStart == nil ?
                                      "Tap the first line endpoint, then the second." :
                                      "Tap the second endpoint to complete the line.") :
@@ -683,7 +694,7 @@ private struct CPPointsView: View {
                                 ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
                                     VStack(alignment: .leading, spacing: 6) {
                                         HStack {
-                                            Text("\(reference.endpoint == nil ? "Point" : "Line") \(index + 1)").fontWeight(.semibold)
+                                            Text("\(reference.endpoint == nil ? "Point" : "Line") \(references.prefix(index + 1).filter { ($0.endpoint != nil) == (reference.endpoint != nil) }.count)").fontWeight(.semibold)
                                             Spacer()
                                             Button {
                                                 references.remove(at: index)
@@ -742,7 +753,7 @@ private struct CPPointsView: View {
                                     Text("Deeper").tag(4)
                                 }.pickerStyle(.segmented)
                                 Button { showRoutes = true } label: {
-                                    Label("Solve \(references.count) point\(references.count == 1 ? "" : "s")",
+                                    Label("Solve \(references.count) reference\(references.count == 1 ? "" : "s")",
                                           systemImage: "sparkles")
                                         .frame(maxWidth: .infinity).padding(.vertical, 8)
                                 }
@@ -753,7 +764,7 @@ private struct CPPointsView: View {
                     } else {
                         Label("Choose an image or PDF, paste a copied image, or load an HTTPS URL.", systemImage: "square.dashed").font(.subheadline).foregroundStyle(.secondary).padding()
                     }
-                    Text("Points in CP finds folding references for the points you select. It does not automatically infer the folding order of the entire crease pattern.")
+                    Text("CP Points finds folding references for the points and lines you select. It does not automatically infer the folding order of the entire crease pattern.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(16).frame(maxWidth: 700).frame(maxWidth: .infinity)
