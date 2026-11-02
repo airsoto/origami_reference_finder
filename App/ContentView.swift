@@ -659,6 +659,9 @@ private struct CPPointsView: View {
     @State private var movingLineAnchor: CGPoint?
     @State private var placementMode: CPPlacementMode = .add
     @State private var cpProjectName = ""
+    @State private var cpSaved: [CPSession] = []
+    @State private var askToSave = false
+    @State private var draftSave: Task<Void, Never>?
     enum CPPlacementMode: String, CaseIterable { case add = "Add", edit = "Move" }
 
     enum CPMode { case paper, points }
