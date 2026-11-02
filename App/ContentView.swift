@@ -671,6 +671,7 @@ private struct CPPointsView: View {
     @State private var askToSave = false
     @State private var draftSave: Task<Void, Never>?
     @State private var snapCandidate: CPSnapCandidate?
+    @State private var nearbyJoin: CPSnapCandidate?
     @State private var showingJoinEndpoints = false
     @State private var dragStartLocation: CGPoint?
     @State private var dragMoved = false
@@ -722,6 +723,7 @@ private struct CPPointsView: View {
                         Label("Pinch to zoom and pan. Tap to add; select a marker or line endpoint to reposition. Zoom for precision.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
                         CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
                                           references: references, mode: mode, moving: placementMode == .edit,
+                                          snapTarget: nearbyJoin.flatMap { endpointPosition($0.fixedIndex, $0.fixedEnd) },
                                           onTouch: handleTouch, onDrag: handleDrag)
                             .frame(height: 440)
                             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -840,7 +842,7 @@ private struct CPPointsView: View {
             .confirmationDialog("Join endpoints?", isPresented: $showingJoinEndpoints,
                                 titleVisibility: .visible) {
                 Button("Join endpoints") { confirmEndpointJoin() }
-                Button("Keep separate", role: .cancel) { snapCandidate = nil }
+                Button("Keep separate", role: .cancel) { snapCandidate = nil; nearbyJoin = nil }
             } message: {
                 Text("Snap these line endpoints together so both lines share the same starting point.")
             }
@@ -1175,26 +1177,41 @@ private struct CPPointsView: View {
         }
     }
 
-    private func offerEndpointJoin(for index: Int, end: Int) {
+    // Find the closest end of another line. Allow exact coincidence: a
+    // previously blocked zero-distance match is a valid join candidate.
+    // The radius is measured in normalized paper coordinates.
+    private func closestEndpointJoin(for index: Int, end: Int) -> CPSnapCandidate? {
         guard let source = endpointPosition(index, end),
               references.indices.contains(index),
-              references[index].endpoint != nil else { return }
-        let choices: [(Int, Int, CGPoint)] = references.indices
-            .filter { $0 != index && references[$0].endpoint != nil }
-            .flatMap { other -> [(Int, Int, CGPoint)] in
-                [(other, 0, references[other].position),
-                 (other, 1, references[other].endpoint!)]
+              references[index].endpoint != nil else { return nil }
+        let threshold = 0.055
+        var best: (index: Int, end: Int, distance: CGFloat)?
+        for other in references.indices where other != index {
+            guard let otherEnd = references[other].endpoint else { continue }
+            for (kind, target) in [(0, references[other].position), (1, otherEnd)] {
+                let distance = hypot(source.x - target.x, source.y - target.y)
+                if distance < threshold && (best == nil || distance < best!.distance) {
+                    best = (other, kind, distance)
+                }
             }
-        guard let nearest = choices.min(by: {
-            hypot($0.2.x - source.x, $0.2.y - source.y) <
-            hypot($1.2.x - source.x, $1.2.y - source.y)
-        }), hypot(nearest.2.x - source.x, nearest.2.y - source.y) < 0.025,
-           hypot(nearest.2.x - source.x, nearest.2.y - source.y) > 0.00000001 else { return }
-        // Do not collapse a line to a zero-length segment.
-        let opposite = endpointPosition(index, end == 0 ? 1 : 0)!
-        guard hypot(opposite.x - nearest.2.x, opposite.y - nearest.2.y) > 0.0001 else { return }
-        snapCandidate = CPSnapCandidate(movingIndex: index, movingEnd: end,
-                                        fixedIndex: nearest.0, fixedEnd: nearest.1)
+        }
+        guard let best,
+              let target = endpointPosition(best.index, best.end),
+              let opposite = endpointPosition(index, end == 0 ? 1 : 0),
+              hypot(opposite.x - target.x, opposite.y - target.y) > 0.0001 else {
+            return nil
+        }
+        return CPSnapCandidate(movingIndex: index, movingEnd: end,
+                               fixedIndex: best.index, fixedEnd: best.end)
+    }
+
+    private func offerEndpointJoin(for index: Int, end: Int) {
+        guard let candidate = closestEndpointJoin(for: index, end: end) else {
+            nearbyJoin = nil
+            return
+        }
+        nearbyJoin = nil
+        snapCandidate = candidate
         showingJoinEndpoints = true
     }
 
@@ -1208,6 +1225,7 @@ private struct CPPointsView: View {
         updateConnectedEndpoint(line: candidate.movingIndex,
                                 end: candidate.movingEnd, to: target)
         snapCandidate = nil
+        nearbyJoin = nil
         queueCPDraft()
     }
 
@@ -1424,6 +1442,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
     let references: [CPReference]
     let mode: CPPointsView.CPMode
     let moving: Bool
+    let snapTarget: CGPoint?
     let onTouch: (CGPoint) -> Void
     let onDrag: (CGPoint, CPDragPhase) -> Void
 
@@ -1459,6 +1478,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
         scroll.paperView.corner = corner
         scroll.paperView.references = references.enumerated().map { ($0.offset + 1, $0.element.position, $0.element.endpoint) }
         scroll.paperView.displayZoom = scroll.zoomScale
+        scroll.paperView.snapTarget = snapTarget
         scroll.paperView.setNeedsDisplay()
     }
 
