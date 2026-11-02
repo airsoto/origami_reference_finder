@@ -1799,6 +1799,58 @@ private struct CPPointResultCard: View {
     @StateObject private var model = SearchModel()
     @State private var started = false
 
+    private func bestRouteIndex(_ solutions: [FoldSolution]) -> Int? {
+        solutions.indices.min { lhs, rhs in
+            let a = solutions[lhs]
+            let b = solutions[rhs]
+            if a.error != b.error { return a.error < b.error }
+            if a.steps.count != b.steps.count { return a.steps.count < b.steps.count }
+            return lhs < rhs
+        }
+    }
+
+    private func routeSelectionCard(route: Int, solution: FoldSolution,
+                                    solutions: [FoldSolution]) -> some View {
+        let isSelected = (selectedRoute ?? bestRouteIndex(solutions)) == route
+        return HStack(spacing: 8) {
+            Button {
+                selectedRoute = route
+            } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("Route \(route + 1)")
+                            .font(.subheadline.bold())
+                        Spacer(minLength: 4)
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .accessibilityLabel("Selected for PDF")
+                        }
+                    }
+                    Text("\(solution.steps.count) diagrams · rank \(solution.rank)")
+                    Text(String(format: "Error %.5f", solution.error))
+                }
+                .font(.caption)
+                .foregroundStyle(isSelected ? Color.white : ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(isSelected ? ink : ink.opacity(0.07),
+                            in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Select route \(route + 1) for PDF")
+            NavigationLink {
+                SolutionView(solution: solution, number: route + 1,
+                             input: model.lastInput ?? model.input)
+            } label: {
+                Image(systemName: "eye")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 42, height: 48)
+                    .background(ink.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            }
+            .accessibilityLabel("View route \(route + 1) diagrams")
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -1827,43 +1879,12 @@ private struct CPPointResultCard: View {
                         .font(.caption)
                 }
                 if !solutions.isEmpty {
-                    Menu {
-                        Button {
-                            selectedRoute = nil
-                        } label: {
-                            Label("Auto · lowest error, then fewest steps",
-                                  systemImage: selectedRoute == nil ? "checkmark" : "sparkles")
-                        }
-                        ForEach(solutions.indices, id: \.self) { route in
-                            Button {
-                                selectedRoute = route
-                            } label: {
-                                Label("Route \(route + 1) · error \(String(format: "%.5f", solutions[route].error)) · \(solutions[route].steps.count) steps",
-                                      systemImage: selectedRoute == route ? "checkmark" : "circle")
-                            }
-                        }
-                    } label: {
-                        Label(selectedRoute.flatMap { solutions.indices.contains($0) ? "Selected: Route \($0 + 1)" : nil } ?? "Select route · Auto (best)",
-                              systemImage: "checkmark.circle")
-                            .font(.caption.weight(.semibold))
-                    }
+                    Text("Tap a route card to select it for the PDF. Use the eye icon to view its diagrams.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 ForEach(Array(solutions.enumerated()), id: \.offset) { route, solution in
-                    NavigationLink {
-                        SolutionView(solution: solution, number: route + 1,
-                                     input: model.lastInput ?? model.input)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Route \(route + 1)")
-                                .font(.subheadline.bold())
-                            Text("\(solution.steps.count) diagrams · rank \(solution.rank)")
-                            Text(String(format: "Error %.5f", solution.error))
-                        }
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-                    }.buttonStyle(.plain)
+                    routeSelectionCard(route: route, solution: solution, solutions: solutions)
                 }
             }
         }
