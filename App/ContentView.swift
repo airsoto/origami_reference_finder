@@ -1151,6 +1151,31 @@ private struct CPPointsView: View {
         }
     }
 
+    private func loadSession(_ project: CPSession?) {
+        guard let project, let loadedImage = UIImage(data: project.image) else { return }
+        image = loadedImage
+        sourceLabel = project.name
+        if let rect = project.paper, rect.count == 4 {
+            paperRegion = CGRect(x: rect[0], y: rect[1], width: rect[2], height: rect[3])
+        } else {
+            paperRegion = nil
+        }
+        references = project.targets.compactMap { values -> CPReference? in
+            guard values.count == 2 || values.count == 4 else { return nil }
+            let start = CGPoint(x: values[0], y: values[1])
+            let end = values.count == 4 ? CGPoint(x: values[2], y: values[3]) : nil
+            return CPReference(position: start, endpoint: end)
+        }
+        mode = paperRegion == nil ? .paper : .points
+        firstCorner = nil
+        editingCorner = nil
+        editingPoint = nil
+        editingEndpoint = nil
+        pendingLineStart = nil
+        movingLineAnchor = nil
+        problem = nil
+    }
+
     private func pasteImage() {
         if let pasted = UIPasteboard.general.image {
             reset(with: pasted, name: "Clipboard image")
