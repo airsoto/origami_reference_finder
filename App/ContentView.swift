@@ -658,6 +658,7 @@ private struct CPPointsView: View {
     @State private var editingEndpoint: Int?
     @State private var movingLineAnchor: CGPoint?
     @State private var placementMode: CPPlacementMode = .add
+    @State private var cpProjectName = ""
     enum CPPlacementMode: String, CaseIterable { case add = "Add", edit = "Move" }
 
     enum CPMode { case paper, points }
