@@ -61,6 +61,7 @@ struct ContentView: View {
                                 Text("Quick").tag(2)
                                 Text("Balanced").tag(3)
                                 Text("Deeper").tag(4)
+                                Text("Expert").tag(5)
                             }.pickerStyle(.segmented)
                             Picker("Reference library limit", selection: $model.input.maxReferences) {
                                 Text("100K").tag(Optional(100000))
@@ -861,6 +862,7 @@ private struct CPPointsView: View {
                                     Text("Quick").tag(2)
                                     Text("Balanced").tag(3)
                                     Text("Deeper").tag(4)
+                                Text("Expert").tag(5)
                                 }.pickerStyle(.segmented)
                                 Button { showRoutes = true } label: {
                                     Label("Solve \(references.count) reference\(references.count == 1 ? "" : "s")",
