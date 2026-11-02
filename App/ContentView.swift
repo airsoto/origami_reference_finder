@@ -618,6 +618,8 @@ private struct CPPointsView: View {
     @State private var pendingLineStart: CGPoint?
     @State private var editingEndpoint: Int?
     @State private var movingLineAnchor: CGPoint?
+    @State private var placementMode: CPPlacementMode = .add
+    enum CPPlacementMode: String, CaseIterable { case add = "Add", edit = "Move" }
 
     enum CPMode { case paper, points }
     enum CPReferenceKind: String, CaseIterable { case point = "Point", line = "Line" }
@@ -651,7 +653,7 @@ private struct CPPointsView: View {
                         Text(sourceLabel).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         Label("Pinch to zoom and pan. Tap to add; select a marker or line endpoint to reposition. Zoom for precision.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
                         CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
-                                          references: references, mode: mode, onTouch: handleTouch)
+                                          references: references, mode: mode, onTouch: handleTouch, onDrag: handleDrag)
                             .frame(height: 440)
                             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                         if paperRegion == nil {
@@ -688,11 +690,16 @@ private struct CPPointsView: View {
                                         editingEndpoint = nil
                                         movingLineAnchor = nil
                                     }
+                                Picker("Action", selection: $placementMode) {
+                                    ForEach(CPPlacementMode.allCases, id: \.self) { action in
+                                        Text(action.rawValue).tag(action)
+                                    }
+                                }.pickerStyle(.segmented)
                                 Text(editingPoint != nil ? (editingEndpoint == 2 ? "Tap the new center of the line." : "Tap a new position for the selected handle.") :
                                      referenceKind == .line ? (pendingLineStart == nil ?
                                      "Tap the first line endpoint, then the second." :
                                      "Tap the second endpoint to complete the line.") :
-                                     "Tap to add a point. Tap a marker to edit it.")
+                                     (placementMode == .add ? "Tap the paper to add a point." : "Drag a point to move it, or tap it and select a new position."))
                                     .font(.caption).foregroundStyle(.secondary)
                                 if pendingLineStart != nil {
                                     Button("Cancel unfinished line") { pendingLineStart = nil }
@@ -915,6 +922,17 @@ private struct CPPointsView: View {
                 editingPoint = nil
                 editingEndpoint = nil
                 movingLineAnchor = nil
+                return
+            }
+            if placementMode == .add {
+                guard paperRegion.contains(point) else { return }
+                if referenceKind == .point {
+                    references.append(CPReference(position: normalized))
+                } else if let start = pendingLineStart {
+                    guard hypot(start.x - normalized.x, start.y - normalized.y) > 0.0001 else { return }
+                    references.append(CPReference(position: start, endpoint: normalized))
+                    pendingLineStart = nil
+                } else { pendingLineStart = normalized }
                 return
             }
             // Select the closest point or either line endpoint.
