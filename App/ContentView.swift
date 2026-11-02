@@ -788,7 +788,7 @@ private struct CPPointsView: View {
                                         movingLineAnchor = nil
                                     }.buttonStyle(.bordered)
                                 }
-                                ForEach(references.indices, id: \.self) { index in
+                                ForEach(Array(references.enumerated()), id: \.element.id) { index, _ in
                                     referenceEditorRow(at: index)
                                 }
                                 HStack {
