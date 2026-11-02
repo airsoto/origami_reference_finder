@@ -637,6 +637,13 @@ struct CPReference: Identifiable, Equatable {
     var endpoint: CGPoint? = nil // second endpoint for a line
 }
 
+private struct CPSnapCandidate {
+    let movingIndex: Int
+    let movingEnd: Int
+    let fixedIndex: Int
+    let fixedEnd: Int
+}
+
 private struct CPPointsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var image: UIImage?
@@ -663,6 +670,10 @@ private struct CPPointsView: View {
     @State private var cpSaved: [CPSession] = []
     @State private var askToSave = false
     @State private var draftSave: Task<Void, Never>?
+    @State private var snapCandidate: CPSnapCandidate?
+    @State private var showingJoinEndpoints = false
+    @State private var dragStartLocation: CGPoint?
+    @State private var dragMoved = false
     enum CPPlacementMode: String, CaseIterable { case add = "Add", edit = "Move" }
 
     enum CPMode { case paper, points }
