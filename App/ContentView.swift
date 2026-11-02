@@ -682,6 +682,12 @@ private struct CPPointsView: View {
                                         Text(kind.rawValue).tag(kind)
                                     }
                                 }.pickerStyle(.segmented)
+                                    .onChange(of: referenceKind) { _ in
+                                        pendingLineStart = nil
+                                        editingPoint = nil
+                                        editingEndpoint = nil
+                                        movingLineAnchor = nil
+                                    }
                                 Text(editingPoint != nil ? (editingEndpoint == 2 ? "Tap the new center of the line." : "Tap a new position for the selected handle.") :
                                      referenceKind == .line ? (pendingLineStart == nil ?
                                      "Tap the first line endpoint, then the second." :
@@ -712,6 +718,12 @@ private struct CPPointsView: View {
                                             Button("Move start") { editingPoint = index; editingEndpoint = 0 }
                                             if reference.endpoint != nil {
                                                 Button("Move end") { editingPoint = index; editingEndpoint = 1 }
+                                                Button("Move line") {
+                                                    editingPoint = index
+                                                    editingEndpoint = 2
+                                                    movingLineAnchor = CGPoint(x: (reference.position.x + (reference.endpoint?.x ?? 0)) / 2,
+                                                                               y: (reference.position.y + (reference.endpoint?.y ?? 0)) / 2)
+                                                }
                                             }
                                         }.font(.caption).buttonStyle(.bordered)
                                         HStack {
