@@ -709,7 +709,8 @@ private struct CPPointsView: View {
                         Text(sourceLabel).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         Label("Pinch to zoom and pan. Tap to add; select a marker or line endpoint to reposition. Zoom for precision.", systemImage: "hand.draw").font(.caption).foregroundStyle(.secondary)
                         CPSelectionCanvas(image: image, region: paperRegion, corner: firstCorner,
-                                          references: references, mode: mode, onTouch: handleTouch, onDrag: handleDrag)
+                                          references: references, mode: mode, moving: placementMode == .edit,
+                                          onTouch: handleTouch, onDrag: handleDrag)
                             .frame(height: 440)
                             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
                         if paperRegion == nil {
@@ -1264,6 +1265,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
     let corner: CGPoint?
     let references: [CPReference]
     let mode: CPPointsView.CPMode
+    let moving: Bool
     let onTouch: (CGPoint) -> Void
     let onDrag: (CGPoint, CPDragPhase) -> Void
 
@@ -1282,6 +1284,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
         drag.minimumPressDuration = 0.20
         drag.allowableMovement = 20
         scroll.paperView.addGestureRecognizer(drag)
+        scroll.editDragRecognizer = drag
         tap.require(toFail: drag)
         scroll.paperView.isUserInteractionEnabled = true
         return scroll
@@ -1290,6 +1293,9 @@ private struct CPSelectionCanvas: UIViewRepresentable {
     func updateUIView(_ scroll: CPZoomScrollView, context: Context) {
         context.coordinator.onTouch = onTouch
         context.coordinator.onDrag = onDrag
+        scroll.editDragRecognizer?.isEnabled = moving && mode == .points
+        scroll.editDragRecognizer?.minimumPressDuration = 0
+        scroll.panGestureRecognizer.minimumNumberOfTouches = moving && mode == .points ? 2 : 1
         scroll.setImageIfNeeded(image)
         scroll.paperView.region = region
         scroll.paperView.corner = corner
@@ -1334,6 +1340,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
 
 private final class CPZoomScrollView: UIScrollView {
     let paperView = CPAnnotatedPaperView()
+    var editDragRecognizer: UILongPressGestureRecognizer?
     private var displayedImage: UIImage?
     private var previousSize: CGSize = .zero
 
