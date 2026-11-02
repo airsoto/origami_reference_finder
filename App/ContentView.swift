@@ -1643,7 +1643,7 @@ private final class CPAnnotatedPaperView: UIView {
                 fill = UIColor(red: 0.03, green: 0.43, blue: 0.48, alpha: 0.58)
             }
             // Compact semi-transparent labels preserve the image beneath.
-            let diameter: CGFloat = (endpoint == nil ? 14 : 17) / z
+            let diameter: CGFloat = (endpoint == nil ? 14 : 34) / z
             let badge = CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2,
                                width: diameter, height: diameter)
             context.setFillColor(fill.cgColor)
@@ -1653,7 +1653,7 @@ private final class CPAnnotatedPaperView: UIView {
             context.strokeEllipse(in: badge)
             let text = label as NSString
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.boldSystemFont(ofSize: (endpoint == nil ? 8.5 : 8) / z),
+                .font: UIFont.boldSystemFont(ofSize: (endpoint == nil ? 8.5 : 16) / z),
                 .foregroundColor: UIColor.white
             ]
             let size = text.size(withAttributes: attrs)
