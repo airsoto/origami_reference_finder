@@ -1458,6 +1458,7 @@ private struct CPSelectionCanvas: UIViewRepresentable {
         scroll.paperView.region = region
         scroll.paperView.corner = corner
         scroll.paperView.references = references.enumerated().map { ($0.offset + 1, $0.element.position, $0.element.endpoint) }
+        scroll.paperView.displayZoom = scroll.zoomScale
         scroll.paperView.setNeedsDisplay()
     }
 
@@ -1483,7 +1484,10 @@ private struct CPSelectionCanvas: UIViewRepresentable {
             (scrollView as? CPZoomScrollView)?.paperView
         }
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
-            (scrollView as? CPZoomScrollView)?.centerPaper()
+            guard let view = scrollView as? CPZoomScrollView else { return }
+            view.centerPaper()
+            view.paperView.displayZoom = view.zoomScale
+            view.paperView.setNeedsDisplay()
         }
         @objc func didTap(_ gesture: UITapGestureRecognizer) {
             guard let paper = gesture.view, paper.bounds.width > 0, paper.bounds.height > 0 else { return }
@@ -1545,21 +1549,24 @@ private final class CPAnnotatedPaperView: UIView {
     var region: CGRect?
     var corner: CGPoint?
     var references: [(Int, CGPoint, CGPoint?)] = []
+    var displayZoom: CGFloat = 1
+    var snapTarget: CGPoint?
 
     override func draw(_ rect: CGRect) {
         guard let image, let context = UIGraphicsGetCurrentContext() else { return }
         image.draw(in: bounds)
+        let z = max(1, displayZoom)
         if let corner {
             let x = corner.x * bounds.width, y = corner.y * bounds.height
             context.setFillColor(UIColor.systemOrange.cgColor)
-            context.fillEllipse(in: CGRect(x: x - 5, y: y - 5, width: 10, height: 10))
+            context.fillEllipse(in: CGRect(x: x - 4 / z, y: y - 4 / z, width: 8 / z, height: 8 / z))
         }
         guard let region else { return }
         let area = CGRect(x: region.minX * bounds.width, y: region.minY * bounds.height,
                           width: region.width * bounds.width, height: region.height * bounds.height)
         context.setStrokeColor(UIColor.systemOrange.cgColor)
-        context.setLineWidth(2)
-        context.setLineDash(phase: 0, lengths: [6, 4])
+        context.setLineWidth(1.1 / z)
+        context.setLineDash(phase: 0, lengths: [5 / z, 3 / z])
         context.stroke(area)
         context.setLineDash(phase: 0, lengths: [])
         for handle in [CGPoint(x: area.minX, y: area.minY),
@@ -1567,7 +1574,7 @@ private final class CPAnnotatedPaperView: UIView {
                        CGPoint(x: area.maxX, y: area.maxY),
                        CGPoint(x: area.minX, y: area.maxY)] {
             context.setFillColor(UIColor.systemOrange.cgColor)
-            context.fillEllipse(in: CGRect(x: handle.x - 6, y: handle.y - 6, width: 12, height: 12))
+            context.fillEllipse(in: CGRect(x: handle.x - 3.5 / z, y: handle.y - 3.5 / z, width: 7 / z, height: 7 / z))
         }
         var pointIndex = 0
         var lineIndex = 0
@@ -1585,16 +1592,17 @@ private final class CPAnnotatedPaperView: UIView {
                 let ey = (region.minY + endpoint.y * region.height) * bounds.height
                 center = CGPoint(x: (x + ex) / 2, y: (y + ey) / 2)
                 let color = CPReferencePalette.lineColor(lineIndex)
-                fill = color.withAlphaComponent(0.70)
-                context.setStrokeColor(color.withAlphaComponent(0.64).cgColor)
-                context.setLineWidth(2.2)
+                fill = color.withAlphaComponent(0.60)
+                context.setStrokeColor(color.withAlphaComponent(0.67).cgColor)
+                context.setLineWidth(1.2 / z)
                 context.move(to: CGPoint(x: x, y: y))
                 context.addLine(to: CGPoint(x: ex, y: ey))
                 context.strokePath()
                 // Small semi-transparent endpoint handles.
-                context.setFillColor(color.withAlphaComponent(0.52).cgColor)
+                context.setFillColor(color.withAlphaComponent(0.85).cgColor)
                 for p in [CGPoint(x: x, y: y), CGPoint(x: ex, y: ey)] {
-                    context.fillEllipse(in: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
+                    context.fillEllipse(in: CGRect(x: p.x - 2.3 / z, y: p.y - 2.3 / z,
+                                                       width: 4.6 / z, height: 4.6 / z))
                 }
             } else {
                 pointIndex += 1
@@ -1603,22 +1611,31 @@ private final class CPAnnotatedPaperView: UIView {
                 fill = UIColor(red: 0.03, green: 0.43, blue: 0.48, alpha: 0.58)
             }
             // Compact semi-transparent labels preserve the image beneath.
-            let diameter: CGFloat = endpoint == nil ? 18 : 21
+            let diameter: CGFloat = (endpoint == nil ? 14 : 17) / z
             let badge = CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2,
                                width: diameter, height: diameter)
             context.setFillColor(fill.cgColor)
             context.fillEllipse(in: badge)
             context.setStrokeColor(UIColor.white.withAlphaComponent(0.65).cgColor)
-            context.setLineWidth(0.8)
+            context.setLineWidth(0.65 / z)
             context.strokeEllipse(in: badge)
             let text = label as NSString
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.boldSystemFont(ofSize: endpoint == nil ? 10 : 9),
+                .font: UIFont.boldSystemFont(ofSize: (endpoint == nil ? 8.5 : 8) / z),
                 .foregroundColor: UIColor.white
             ]
             let size = text.size(withAttributes: attrs)
             text.draw(at: CGPoint(x: center.x - size.width / 2, y: center.y - size.height / 2),
                       withAttributes: attrs)
+        }
+        if let snapTarget {
+            let p = CGPoint(x: (region.minX + snapTarget.x * region.width) * bounds.width,
+                            y: (region.minY + snapTarget.y * region.height) * bounds.height)
+            let halo = CGRect(x: p.x - 10 / z, y: p.y - 10 / z,
+                              width: 20 / z, height: 20 / z)
+            context.setStrokeColor(UIColor.systemGreen.cgColor)
+            context.setLineWidth(1.8 / z)
+            context.strokeEllipse(in: halo)
         }
     }
 }
