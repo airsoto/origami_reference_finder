@@ -75,7 +75,14 @@ enum CPPDFExporter {
                             PlacedHeading(title: "\(label)  ·  ROUTE \(routeIndex + 1) (continued)", y: y))
                         y += 31
                     }
-                    guard let originalDiagram = await converter.render(step.svg) else {
+                    let isLastLineStep = stepIndex == route.steps.count - 1 && reference.endpoint != nil
+                    // The engine may highlight an infinitely extended reference line.
+                    // In the final PDF diagram, tone down that full-length highlight,
+                    // then overlay only the actual CP segment between its endpoints.
+                    let svg = isLastLineStep
+                        ? step.svg.replacingOccurrences(of: "stroke=\\\"#007c91\\\"", with: "stroke=\\\"#9ca3af\\\"")
+                        : step.svg
+                    guard let originalDiagram = await converter.render(svg) else {
                         throw ExportError.invalidDiagram
                     }
                     // Highlight the target segment only on the LAST step of a line.
