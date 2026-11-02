@@ -920,6 +920,21 @@ private struct CPPointsView: View {
             }), hypot(closest.2.x - normalized.x, closest.2.y - normalized.y) < 0.035 {
                 editingPoint = closest.0
                 editingEndpoint = closest.1
+            } else if let index = references.indices.first(where: { i in
+                guard let end = references[i].endpoint else { return false }
+                let start = references[i].position
+                let dx = end.x - start.x, dy = end.y - start.y
+                let lengthSquared = dx * dx + dy * dy
+                guard lengthSquared > 0 else { return false }
+                let t = min(1, max(0, ((normalized.x - start.x) * dx + (normalized.y - start.y) * dy) / lengthSquared))
+                return hypot(normalized.x - (start.x + t * dx), normalized.y - (start.y + t * dy)) < 0.018
+            }) {
+                editingPoint = index
+                editingEndpoint = 2
+                if let end = references[index].endpoint {
+                    movingLineAnchor = CGPoint(x: (references[index].position.x + end.x) / 2,
+                                               y: (references[index].position.y + end.y) / 2)
+                }
             } else if paperRegion.contains(point) {
                 if referenceKind == .point {
                     references.append(CPReference(position: normalized))
