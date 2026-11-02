@@ -15,6 +15,7 @@ std::mutex engineMutex;
 std::atomic<bool> cancelled{false};
 bool ready = false;
 int cachedRank = -1;
+int cachedLimit = -1;
 double cachedWidth = 0, cachedHeight = 0;
 
 std::string json(const std::string& s) {
@@ -151,6 +152,7 @@ std::string solve(const Request& r) {
     if(width < .25 || width > 2 || height < .25 || height > 2 ||
        std::max(width,height)/std::min(width,height) > 4)
       throw std::runtime_error("Use paper dimensions from 0.25 to 2 and a maximum aspect ratio of 4:1.");
+    if(r.maxReferences < 10000 || r.maxReferences > 500000) throw std::runtime_error("Reference library size must be between 10,000 and 500,000.");
     if(r.rank < 2 || r.rank > 4) throw std::runtime_error("Search rank must be between 2 and 4.");
     const XYPt p(evaluate(r.x), evaluate(r.y));
     XYPt p2;
@@ -161,17 +163,17 @@ std::string solve(const Request& r) {
       if(!inside(p2) || (p-p2).Mag() < 1e-7)
         throw std::runtime_error("A line needs two different points inside the paper.");
     }
-    if(!ready || r.rank != cachedRank || width != cachedWidth || height != cachedHeight) {
+    if(!ready || r.rank != cachedRank || r.maxReferences != cachedLimit || width != cachedWidth || height != cachedHeight) {
       ready = false;
       ReferenceFinder::sPaper.SetSize(width,height);
       ReferenceFinder::sMaxRank = r.rank;
-      ReferenceFinder::sMaxLines = 100000;
-      ReferenceFinder::sMaxMarks = 100000;
+      ReferenceFinder::sMaxLines = r.maxReferences;
+      ReferenceFinder::sMaxMarks = r.maxReferences;
       ReferenceFinder::sDatabaseStatusSkip = 1000;
       ReferenceFinder::SetDatabaseFn(databaseProgress);
       ReferenceFinder::MakeAllMarksAndLines();
       if(cancelled) throw std::runtime_error("Search cancelled.");
-      cachedRank = r.rank; cachedWidth = width; cachedHeight = height; ready = true;
+      cachedRank = r.rank; cachedLimit = r.maxReferences; cachedWidth = width; cachedHeight = height; ready = true;
     }
     std::string found;
     if(r.line) {
