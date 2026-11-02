@@ -1235,6 +1235,7 @@ private struct CPPointsView: View {
                         y: (p.y - region.minY) / region.height)
         switch phase {
         case .began:
+            nearbyJoin = nil
             let choices = references.indices.flatMap { i -> [(Int, Int, CGPoint)] in
                 var parts = [(i, 0, references[i].position)]
                 if let end = references[i].endpoint { parts.append((i, 1, end)) }
@@ -1272,12 +1273,23 @@ private struct CPPointsView: View {
                     references[i].position = value
                 }
             }
+            if let part = editingEndpoint, part < 2, references[i].endpoint != nil {
+                nearbyJoin = closestEndpointJoin(for: i, end: part)
+            } else {
+                nearbyJoin = nil
+            }
         case .ended:
             if let i = editingPoint, let end = editingEndpoint,
                end < 2, dragMoved, references.indices.contains(i),
                references[i].endpoint != nil {
-                offerEndpointJoin(for: i, end: end)
+                if let candidate = nearbyJoin {
+                    snapCandidate = candidate
+                    showingJoinEndpoints = true
+                } else {
+                    offerEndpointJoin(for: i, end: end)
+                }
             }
+            nearbyJoin = nil
             editingPoint = nil
             editingEndpoint = nil
             dragStartLocation = nil
