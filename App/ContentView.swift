@@ -325,15 +325,13 @@ private struct PaperPreview: View {
 struct DoneButton: View {
     let action: () -> Void
     var body: some View {
-        Button(action: action) {
-            Text("Done")
-                .font(.body.weight(.semibold))
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 18)
-                .frame(minWidth: 82, minHeight: 44)
-                .foregroundStyle(.white)
-                .background(ink, in: Capsule())
-        }.buttonStyle(.plain)
+        Button("Done", action: action)
+            .font(.body.weight(.semibold))
+            .frame(minWidth: 90, minHeight: 44)
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(ink)
+            .accessibilityLabel("Done")
     }
 }
 
