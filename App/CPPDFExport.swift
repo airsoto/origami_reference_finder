@@ -31,8 +31,8 @@ enum CPPDFExporter {
 
     static func create(image: UIImage, region: CGRect,
                        references: [CPReference], solutions: [[FoldSolution]],
-                       title: String) async throws -> URL {
-        guard references.count == solutions.count else {
+                       chosenRoutes: [Int?], title: String) async throws -> URL {
+        guard references.count == solutions.count && chosenRoutes.count == references.count else {
             throw ExportError.invalidReferences
         }
         let converter = CPDiagramSnapshotter()
@@ -44,7 +44,18 @@ enum CPPDFExporter {
         for (index, reference) in references.enumerated() {
             if reference.endpoint == nil { pointNumber += 1 } else { lineNumber += 1 }
             let label = reference.endpoint == nil ? "POINT \(pointNumber)" : "LINE \(lineNumber)"
-            for (routeIndex, route) in solutions[index].enumerated() {
+            let available = solutions[index]
+            guard !available.isEmpty else { continue }
+            let bestIndex = available.indices.min { a, b in
+                let lhs = available[a]
+                let rhs = available[b]
+                if lhs.error != rhs.error { return lhs.error < rhs.error }
+                if lhs.steps.count != rhs.steps.count { return lhs.steps.count < rhs.steps.count }
+                return a < b
+            }!
+            let routeIndex = chosenRoutes[index].flatMap { available.indices.contains($0) ? $0 : nil } ?? bestIndex
+            let route = available[routeIndex]
+            do {
                 if y + 32 + rowHeight > footerY - 22 {
                     pages.append(Page()); y = margin + 18
                 }
