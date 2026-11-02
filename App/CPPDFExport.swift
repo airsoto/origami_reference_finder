@@ -46,6 +46,7 @@ enum CPPDFExporter {
 
         var pointNumber = 0
         var lineNumber = 0
+        var completedLines: [(CGPoint, CGPoint)] = []
         for (index, reference) in references.enumerated() {
             if reference.endpoint == nil { pointNumber += 1 } else { lineNumber += 1 }
             let label = reference.endpoint == nil ? "POINT \(pointNumber)" : "LINE \(lineNumber)"
@@ -87,13 +88,18 @@ enum CPPDFExporter {
                     }
                     // Highlight the target segment only on the LAST step of a line.
                     // This overlay does not alter the actual construction diagrams.
+                    // Carry earlier selected line segments into subsequent diagrams.
+                    // Draw them lightly so they remain visible but do not obscure
+                    // the active folding construction or its final target.
+                    let withHistory = drawCompletedSegments(on: originalDiagram,
+                                                            lines: completedLines)
                     let diagram: UIImage
                     if stepIndex == route.steps.count - 1, let end = reference.endpoint {
-                        diagram = highlightSegment(on: originalDiagram,
+                        diagram = highlightSegment(on: withHistory,
                                                   from: reference.position, to: end,
                                                   color: lineColors[(lineNumber - 1) % lineColors.count])
                     } else {
-                        diagram = originalDiagram
+                        diagram = withHistory
                     }
                     let x = margin + CGFloat(column) * (tile + gap)
                     pages[pages.count - 1].diagrams.append(
@@ -105,6 +111,11 @@ enum CPPDFExporter {
                     }
                 }
                 y += 14
+            }
+            // This target becomes a completed crease for every later line.
+            // A failed/unavailable route is not falsely marked as completed.
+            if let end = reference.endpoint {
+                completedLines.append((reference.position, end))
             }
         }
 
@@ -148,7 +159,10 @@ enum CPPDFExporter {
                 line.addLine(to: CGPoint(x: width - margin, y: footerY - 9))
                 line.stroke()
                 drawText("ReferenceFinder · Robert J. Lang",
-                         at: CGPoint(x: margin, y: footerY), font: .systemFont(ofSize: 8),
+                         at: CGPoint(x: margin, y: footerY - 4), font: .systemFont(ofSize: 8),
+                         color: .darkGray)
+                drawText("Developed for iOS by Ángel Soto",
+                         at: CGPoint(x: margin, y: footerY + 8), font: .systemFont(ofSize: 8),
                          color: .darkGray)
                 drawText("Page \(index + 1) of \(pages.count)",
                          at: CGPoint(x: width - margin - 80, y: footerY),
@@ -165,6 +179,29 @@ enum CPPDFExporter {
     // viewBox (-0.12, -0.12, 1.24, 1.24). CP coordinates have a top-left origin.
     // Draw exactly the finite endpoint-to-endpoint target segment, never the
     // infinitely extended construction line.
+    private static func drawCompletedSegments(on original: UIImage,
+                                              lines: [(CGPoint, CGPoint)]) -> UIImage {
+        guard !lines.isEmpty else { return original }
+        let size = original.size
+        // Match the square paper coordinates used by MobileEngine's SVG viewBox.
+        func project(_ p: CGPoint) -> CGPoint {
+            CGPoint(x: (p.x + 0.12) / 1.24 * size.width,
+                    y: (p.y + 0.12) / 1.24 * size.height)
+        }
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            original.draw(in: CGRect(origin: .zero, size: size))
+            let path = UIBezierPath()
+            path.lineCapStyle = .round
+            path.lineWidth = max(1, min(size.width, size.height) * 0.004)
+            for (start, end) in lines {
+                path.move(to: project(start))
+                path.addLine(to: project(end))
+            }
+            UIColor.lightGray.withAlphaComponent(0.75).setStroke()
+            path.stroke()
+        }
+    }
+
     private static func highlightSegment(on original: UIImage,
                                          from start: CGPoint, to end: CGPoint,
                                          color: UIColor) -> UIImage {
