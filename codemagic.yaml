@@ -11,6 +11,7 @@ workflows:
       - name: Compilar la app para simulador
         script: |
           set -euo pipefail
+          python3 scripts/generate_project.py
           xcodebuild -project OrigamiReference.xcodeproj -scheme OrigamiReference \
             -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
