@@ -1615,6 +1615,28 @@ private struct CPPointResultCard: View {
                     Text("No solutions found. Try a deeper search.")
                         .font(.caption)
                 }
+                if !solutions.isEmpty {
+                    Menu {
+                        Button {
+                            selectedRoute = nil
+                        } label: {
+                            Label("Auto · lowest error, then fewest steps",
+                                  systemImage: selectedRoute == nil ? "checkmark" : "sparkles")
+                        }
+                        ForEach(solutions.indices, id: \.self) { route in
+                            Button {
+                                selectedRoute = route
+                            } label: {
+                                Label("Route \(route + 1) · error \(String(format: "%.5f", solutions[route].error)) · \(solutions[route].steps.count) steps",
+                                      systemImage: selectedRoute == route ? "checkmark" : "circle")
+                            }
+                        }
+                    } label: {
+                        Label(selectedRoute.flatMap { solutions.indices.contains($0) ? "PDF: Route \($0 + 1)" : nil } ?? "PDF: Auto (best route)",
+                              systemImage: "doc.text")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
                 ForEach(Array(solutions.enumerated()), id: \.offset) { route, solution in
                     NavigationLink {
                         SolutionView(solution: solution, number: route + 1,
