@@ -1021,6 +1021,8 @@ private struct CPPointsView: View {
                     }
                     references[selected].position = movedStart
                     references[selected].endpoint = movedEnd
+                    offerEndpointJoin(for: selected, end: 0)
+                    if !showingJoinEndpoints { offerEndpointJoin(for: selected, end: 1) }
                 } else if editingEndpoint == 1 {
                     guard hypot(references[selected].position.x - normalized.x,
                                 references[selected].position.y - normalized.y) > 0.0001 else {
@@ -1285,6 +1287,8 @@ private struct CPPointsView: View {
         editingEndpoint = nil
         pendingLineStart = nil
         movingLineAnchor = nil
+        snapCandidate = nil
+        showingJoinEndpoints = false
         problem = nil
     }
 
