@@ -80,7 +80,7 @@ enum CPPDFExporter {
                     // In the final PDF diagram, tone down that full-length highlight,
                     // then overlay only the actual CP segment between its endpoints.
                     let svg = isLastLineStep
-                        ? step.svg.replacingOccurrences(of: "stroke=\\\"#007c91\\\"", with: "stroke=\\\"#9ca3af\\\"")
+                        ? step.svg.replacingOccurrences(of: "stroke=\"#007c91\"", with: "stroke=\"#9ca3af\"")
                         : step.svg
                     guard let originalDiagram = await converter.render(svg) else {
                         throw ExportError.invalidDiagram
