@@ -1027,14 +1027,18 @@ private struct CPPointsView: View {
                         problem = "Line endpoints must differ."
                         return
                     }
-                    references[selected].endpoint = normalized
+                    updateConnectedEndpoint(line: selected, end: 1, to: normalized)
+                    offerEndpointJoin(for: selected, end: 1)
                 } else {
                     if let end = references[selected].endpoint,
                        hypot(end.x - normalized.x, end.y - normalized.y) <= 0.0001 {
                         problem = "Line endpoints must differ."
                         return
                     }
-                    references[selected].position = normalized
+                    if references[selected].endpoint != nil {
+                        updateConnectedEndpoint(line: selected, end: 0, to: normalized)
+                        offerEndpointJoin(for: selected, end: 0)
+                    } else { references[selected].position = normalized }
                 }
                 editingPoint = nil
                 editingEndpoint = nil
@@ -1049,6 +1053,8 @@ private struct CPPointsView: View {
                     guard hypot(start.x - normalized.x, start.y - normalized.y) > 0.0001 else { return }
                     references.append(CPReference(position: start, endpoint: normalized))
                     pendingLineStart = nil
+                    offerEndpointJoin(for: references.count - 1, end: 0)
+                    if !showingJoinEndpoints { offerEndpointJoin(for: references.count - 1, end: 1) }
                 } else { pendingLineStart = normalized }
                 return
             }
@@ -1088,6 +1094,8 @@ private struct CPPointsView: View {
                     }
                     references.append(CPReference(position: start, endpoint: normalized))
                     pendingLineStart = nil
+                    offerEndpointJoin(for: references.count - 1, end: 0)
+                    if !showingJoinEndpoints { offerEndpointJoin(for: references.count - 1, end: 1) }
                 } else {
                     pendingLineStart = normalized
                 }
