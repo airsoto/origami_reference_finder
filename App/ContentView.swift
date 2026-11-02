@@ -788,69 +788,8 @@ private struct CPPointsView: View {
                                         movingLineAnchor = nil
                                     }.buttonStyle(.bordered)
                                 }
-                                ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            HStack(spacing: 6) {
-                                                if reference.endpoint != nil {
-                                                    Circle()
-                                                        .fill(Color(uiColor: CPReferencePalette.lineColor(
-                                                            references.prefix(index + 1).filter { $0.endpoint != nil }.count)).opacity(0.75))
-                                                        .frame(width: 10, height: 10)
-                                                }
-                                                Text("\(reference.endpoint == nil ? "Point" : "Line") \(references.prefix(index + 1).filter { ($0.endpoint != nil) == (reference.endpoint != nil) }.count)")
-                                                    .fontWeight(.semibold)
-                                            }
-                                            Spacer()
-                                            Button {
-                                                references.remove(at: index)
-                                                editingPoint = nil
-                                                editingEndpoint = nil
-                                            } label: { Image(systemName: "minus.circle") }
-                                        }
-                                        Text(String(format: "X1 %.5f · Y1 %.5f", reference.position.x, 1 - reference.position.y))
-                                            .font(.caption.monospacedDigit())
-                                        if let end = reference.endpoint {
-                                            Text(String(format: "X2 %.5f · Y2 %.5f", end.x, 1 - end.y))
-                                                .font(.caption.monospacedDigit())
-                                        }
-                                        HStack {
-                                            Button("Move start") { editingPoint = index; editingEndpoint = 0 }
-                                            if reference.endpoint != nil {
-                                                Button("Move end") { editingPoint = index; editingEndpoint = 1 }
-                                                Button("Move line") {
-                                                    editingPoint = index
-                                                    editingEndpoint = 2
-                                                    movingLineAnchor = CGPoint(x: (reference.position.x + (reference.endpoint?.x ?? 0)) / 2,
-                                                                               y: (reference.position.y + (reference.endpoint?.y ?? 0)) / 2)
-                                                }
-                                            }
-                                        }.font(.caption).buttonStyle(.bordered)
-                                        HStack {
-                                            ForEach(0..<(reference.endpoint == nil ? 2 : 4), id: \.self) { coordinate in
-                                                let isEnd = coordinate >= 2
-                                                let isX = coordinate % 2 == 0
-                                                let value = isEnd ? (reference.endpoint ?? .zero) : reference.position
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    Text("\(isX ? "X" : "Y")\(isEnd ? "2" : "1")").font(.caption2)
-                                                    TextField("0…1", text: Binding(
-                                                        get: { String(format: "%.5f", isX ? value.x : 1 - value.y) },
-                                                        set: { raw in
-                                                            guard let n = Double(raw.replacingOccurrences(of: ",", with: ".")),
-                                                                  n.isFinite, (0...1).contains(n),
-                                                                  references.indices.contains(index) else { return }
-                                                            var p = isEnd ? (references[index].endpoint ?? .zero) : references[index].position
-                                                            if isX { p.x = n } else { p.y = 1 - n }
-                                                            if isEnd { references[index].endpoint = p }
-                                                            else { references[index].position = p }
-                                                        }))
-                                                        .keyboardType(.decimalPad)
-                                                        .textFieldStyle(.roundedBorder)
-                                                        .font(.caption.monospacedDigit())
-                                                }
-                                            }
-                                        }
-                                    }.padding(8).background(.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                                ForEach(references.indices, id: \.self) { index in
+                                    referenceEditorRow(at: index)
                                 }
                                 HStack {
                                     Button("Undo last") {
@@ -934,6 +873,110 @@ private struct CPPointsView: View {
                 CPPointsResultsView(points: references, rank: searchRank, maxReferences: cpLibrarySize,
                                     image: image, region: paperRegion, title: sourceLabel)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func referenceEditorRow(at index: Int) -> some View {
+        if references.indices.contains(index) {
+            let reference = references[index]
+            let number = references.prefix(index + 1).filter {
+                ($0.endpoint != nil) == (reference.endpoint != nil)
+            }.count
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    if reference.endpoint != nil {
+                        Circle()
+                            .fill(Color(uiColor: CPReferencePalette.lineColor(number)).opacity(0.75))
+                            .frame(width: 10, height: 10)
+                    }
+                    Text("\(reference.endpoint == nil ? "Point" : "Line") \(number)")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Button {
+                        references.remove(at: index)
+                        editingPoint = nil
+                        editingEndpoint = nil
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                }
+                Text(String(format: "X1 %.5f · Y1 %.5f",
+                            reference.position.x, 1 - reference.position.y))
+                    .font(.caption.monospacedDigit())
+                if let end = reference.endpoint {
+                    Text(String(format: "X2 %.5f · Y2 %.5f", end.x, 1 - end.y))
+                        .font(.caption.monospacedDigit())
+                }
+                referenceMoveButtons(index: index, reference: reference)
+                HStack {
+                    referenceCoordinateField(index: index, end: false, x: true)
+                    referenceCoordinateField(index: index, end: false, x: false)
+                    if reference.endpoint != nil {
+                        referenceCoordinateField(index: index, end: true, x: true)
+                        referenceCoordinateField(index: index, end: true, x: false)
+                    }
+                }
+            }
+            .padding(8)
+            .background(.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func referenceMoveButtons(index: Int, reference: CPReference) -> some View {
+        HStack {
+            Button("Move start") {
+                editingPoint = index
+                editingEndpoint = 0
+            }
+            if let end = reference.endpoint {
+                Button("Move end") {
+                    editingPoint = index
+                    editingEndpoint = 1
+                }
+                Button("Move line") {
+                    editingPoint = index
+                    editingEndpoint = 2
+                    let centerX = (reference.position.x + end.x) * 0.5
+                    let centerY = (reference.position.y + end.y) * 0.5
+                    movingLineAnchor = CGPoint(x: centerX, y: centerY)
+                }
+            }
+        }
+        .font(.caption)
+        .buttonStyle(.bordered)
+    }
+
+    private func referenceCoordinateField(index: Int, end: Bool, x: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(x ? "X" : "Y")\(end ? "2" : "1")").font(.caption2)
+            TextField("0…1", text: Binding(
+                get: {
+                    guard references.indices.contains(index) else { return "" }
+                    let ref = references[index]
+                    let position = end ? (ref.endpoint ?? .zero) : ref.position
+                    return String(format: "%.5f", x ? position.x : 1 - position.y)
+                },
+                set: { raw in
+                    guard references.indices.contains(index),
+                          let number = Double(raw.replacingOccurrences(of: ",", with: ".")),
+                          number.isFinite, (0...1).contains(number) else { return }
+                    let ref = references[index]
+                    var position = end ? (ref.endpoint ?? .zero) : ref.position
+                    if x { position.x = number } else { position.y = 1 - number }
+                    if ref.endpoint != nil {
+                        let currentOpposite = end ? ref.position : (ref.endpoint ?? .zero)
+                        guard hypot(position.x - currentOpposite.x,
+                                    position.y - currentOpposite.y) > 0.0001 else { return }
+                        updateConnectedEndpoint(line: index, end: end ? 1 : 0, to: position)
+                    } else {
+                        references[index].position = position
+                    }
+                }
+            ))
+            .keyboardType(.decimalPad)
+            .textFieldStyle(.roundedBorder)
+            .font(.caption.monospacedDigit())
         }
     }
 
