@@ -1478,6 +1478,7 @@ private struct CPPointsResultsView: View {
     @State private var exportURL: URL?
     @State private var exportBusy = false
     @State private var exportError: String?
+    @State private var selectedRoutes: [UUID: Int] = [:]
     @AppStorage("origami.cp.columns") private var columns = 1
     @MainActor
     private func exportToPDF() async {
@@ -1513,7 +1514,7 @@ private struct CPPointsResultsView: View {
             }.value
             exportURL = try await CPPDFExporter.create(image: image, region: region,
                                                        references: points, solutions: all,
-                                                       title: title)
+                                                       chosenRoutes: points.map { selectedRoutes[$0.id] }, title: title)
         } catch {
             exportError = "Could not export PDF: \(error.localizedDescription)"
         }
@@ -1551,7 +1552,7 @@ private struct CPPointsResultsView: View {
                         }
                     }.buttonStyle(.borderedProminent)
                     if let exportError { Text(exportError).foregroundStyle(.red).font(.caption) }
-                    Text("Each point or line is solved independently. Open a route for its numbered folding sequence.")
+                    Text("Choose one route per target for PDF export. Auto uses the smallest error, then the fewest steps. Only one route is exported per point or line.")
                         .font(.caption).foregroundStyle(.secondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top),
                                               count: max(1, min(4, columns))),
@@ -1561,7 +1562,9 @@ private struct CPPointsResultsView: View {
                                               number: points.prefix(index + 1).filter {
                                                   ($0.endpoint != nil) == (point.endpoint != nil)
                                               }.count,
-                                              point: point, rank: rank, maxReferences: maxReferences)
+                                              point: point, rank: rank, maxReferences: maxReferences,
+                                              selectedRoute: Binding(get: { selectedRoutes[point.id] },
+                                                                     set: { selectedRoutes[point.id] = $0 }))
                         }
                     }
                 }
@@ -1581,6 +1584,7 @@ private struct CPPointResultCard: View {
     let point: CPReference
     let rank: Int
     let maxReferences: Int
+    @Binding var selectedRoute: Int?
     @StateObject private var model = SearchModel()
     @State private var started = false
 
