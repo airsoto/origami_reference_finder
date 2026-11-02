@@ -630,7 +630,7 @@ private enum CPSessionStore {
     }
 }
 
-private struct CPReference: Identifiable {
+private struct CPReference: Identifiable, Equatable {
     let id = UUID()
     var position: CGPoint // normalized top-left-origin paper coordinates
     var endpoint: CGPoint? = nil // second endpoint for a line
@@ -896,7 +896,7 @@ private struct CPPointsView: View {
                 if image == nil { loadSession(CPSessionStore.load("draft")) }
             }
             .onDisappear { draftSave?.cancel(); saveCPDraft() }
-            .onChange(of: references.count) { _ in queueCPDraft() }
+            .onChange(of: references) { _ in queueCPDraft() }
             .onChange(of: paperRegion) { _ in queueCPDraft() }
             .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.image, .pdf]) { result in
                 switch result {
