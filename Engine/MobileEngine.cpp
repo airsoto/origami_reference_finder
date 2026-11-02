@@ -153,7 +153,7 @@ std::string solve(const Request& r) {
        std::max(width,height)/std::min(width,height) > 4)
       throw std::runtime_error("Use paper dimensions from 0.25 to 2 and a maximum aspect ratio of 4:1.");
     if(r.maxReferences < 10000 || r.maxReferences > 500000) throw std::runtime_error("Reference library size must be between 10,000 and 500,000.");
-    if(r.rank < 2 || r.rank > 4) throw std::runtime_error("Search rank must be between 2 and 4.");
+    if(r.rank < 2 || r.rank > 5) throw std::runtime_error("Search rank must be between 2 and 5.");
     const XYPt p(evaluate(r.x), evaluate(r.y));
     XYPt p2;
     auto inside = [&](const XYPt& q) { return q.x >= 0 && q.y >= 0 && q.x <= width && q.y <= height; };
