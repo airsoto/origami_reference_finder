@@ -270,6 +270,41 @@ enum CPPDFExporter {
         }
     }
 
+    // Show only the achieved CP references on a clean square: finite line
+    // segments and constructed points together, rendered in neutral gray.
+    private static func finalGrayReferences(lines: [(CGPoint, CGPoint)],
+                                            points: [CGPoint]) -> UIImage {
+        let size = CGSize(width: 1100, height: 1100)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(origin: .zero, size: size))
+            let border = CGRect(x: 14, y: 14, width: 1072, height: 1072)
+            UIColor.gray.setStroke()
+            let boundary = UIBezierPath(rect: border)
+            boundary.lineWidth = 2.5
+            boundary.stroke()
+            func project(_ point: CGPoint) -> CGPoint {
+                CGPoint(x: border.minX + point.x * border.width,
+                        y: border.minY + point.y * border.height)
+            }
+            let segments = UIBezierPath()
+            segments.lineCapStyle = .round
+            segments.lineWidth = 4
+            for (start, end) in lines {
+                segments.move(to: project(start))
+                segments.addLine(to: project(end))
+            }
+            UIColor.lightGray.setStroke()
+            segments.stroke()
+            UIColor.gray.setFill()
+            for point in points {
+                let center = project(point)
+                UIBezierPath(ovalIn: CGRect(x: center.x - 7, y: center.y - 7,
+                                            width: 14, height: 14)).fill()
+            }
+        }
+    }
+
     private static func drawText(_ string: String, at point: CGPoint, font: UIFont,
                                  color: UIColor = .black) {
         (string as NSString).draw(at: point,
