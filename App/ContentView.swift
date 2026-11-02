@@ -700,7 +700,16 @@ private struct CPPointsView: View {
                                 ForEach(Array(references.enumerated()), id: \.element.id) { index, reference in
                                     VStack(alignment: .leading, spacing: 6) {
                                         HStack {
-                                            Text("\(reference.endpoint == nil ? "Point" : "Line") \(references.prefix(index + 1).filter { ($0.endpoint != nil) == (reference.endpoint != nil) }.count)").fontWeight(.semibold)
+                                            HStack(spacing: 6) {
+                                                if reference.endpoint != nil {
+                                                    Circle()
+                                                        .fill(Color(uiColor: CPReferencePalette.lineColor(
+                                                            references.prefix(index + 1).filter { $0.endpoint != nil }.count)).opacity(0.75))
+                                                        .frame(width: 10, height: 10)
+                                                }
+                                                Text("\(reference.endpoint == nil ? "Point" : "Line") \(references.prefix(index + 1).filter { ($0.endpoint != nil) == (reference.endpoint != nil) }.count)")
+                                                    .fontWeight(.semibold)
+                                            }
                                             Spacer()
                                             Button {
                                                 references.remove(at: index)
@@ -1218,7 +1227,7 @@ private struct CPPointsResultsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        Text("References for \(points.count) CP points")
+                        Text("References for \(points.count) CP targets")
                             .font(.headline)
                         Spacer()
                         Menu {
@@ -1260,11 +1269,19 @@ private struct CPPointResultCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("POINT \(index)").font(.headline).foregroundStyle(ink)
+            HStack(spacing: 6) {
+                if point.endpoint != nil {
+                    Circle()
+                        .fill(Color(uiColor: CPReferencePalette.lineColor(index)).opacity(0.75))
+                        .frame(width: 10, height: 10)
+                }
+                Text("\(point.endpoint == nil ? "POINT" : "LINE") \(index)")
+                    .font(.headline).foregroundStyle(ink)
+            }
             Text(String(format: "X %.5f\nY %.5f", point.position.x, 1 - point.position.y))
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             if let end = point.endpoint {
-                Text(String(format: "X2 %.5f\\nY2 %.5f", end.x, 1 - end.y))
+                Text(String(format: "X2 %.5f\nY2 %.5f", end.x, 1 - end.y))
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             if model.isSearching {
