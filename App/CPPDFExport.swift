@@ -172,6 +172,38 @@ enum CPPDFExporter {
                          at: CGPoint(x: width - margin - 80, y: footerY),
                          font: .systemFont(ofSize: 8), color: .darkGray)
             }
+            context.beginPage()
+            drawText("ORIGAMI REFERENCE FINDER  |  CP POINTS",
+                     at: CGPoint(x: margin, y: 23), font: .boldSystemFont(ofSize: 13))
+            drawText("Final comparison", at: CGPoint(x: margin, y: 62),
+                     font: .boldSystemFont(ofSize: 16))
+            let panelGap: CGFloat = 16
+            let panelWidth = (width - 2 * margin - panelGap) / 2
+            let left = CGRect(x: margin, y: 112, width: panelWidth, height: panelWidth)
+            let right = CGRect(x: margin + panelWidth + panelGap, y: 112,
+                               width: panelWidth, height: panelWidth)
+            drawText("Constructed references", at: CGPoint(x: left.minX, y: 94),
+                     font: .boldSystemFont(ofSize: 10))
+            drawText("Defined CP references", at: CGPoint(x: right.minX, y: 94),
+                     font: .boldSystemFont(ofSize: 10))
+            drawFitted(finalConstructed, in: left)
+            drawFitted(annotated, in: right)
+            UIColor.lightGray.setStroke()
+            UIBezierPath(rect: left).stroke()
+            UIBezierPath(rect: right).stroke()
+            let footerLine = UIBezierPath()
+            footerLine.move(to: CGPoint(x: margin, y: footerY - 9))
+            footerLine.addLine(to: CGPoint(x: width - margin, y: footerY - 9))
+            footerLine.stroke()
+            drawText("ReferenceFinder · Robert J. Lang",
+                     at: CGPoint(x: margin, y: footerY - 4),
+                     font: .systemFont(ofSize: 8), color: .darkGray)
+            drawText("Developed for iOS by Ángel Soto",
+                     at: CGPoint(x: margin, y: footerY + 8),
+                     font: .systemFont(ofSize: 8), color: .darkGray)
+            drawText("Page \(pages.count + 1) of \(pages.count + 1)",
+                     at: CGPoint(x: width - margin - 80, y: footerY),
+                     font: .systemFont(ofSize: 8), color: .darkGray)
         }
         let name = "CP_Points_\(UUID().uuidString).pdf"
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent(name)
