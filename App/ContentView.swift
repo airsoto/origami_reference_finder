@@ -1110,6 +1110,47 @@ private struct CPPointsView: View {
         }
     }
 
+    private func captureCP(id: String, name: String) -> CPSession? {
+        guard let image, let data = image.jpegData(compressionQuality: 0.85) else { return nil }
+        let paper = paperRegion.map { [Double($0.minX), Double($0.minY),
+                                        Double($0.width), Double($0.height)] }
+        let targets = references.map { reference -> [Double] in
+            var coordinates = [Double(reference.position.x), Double(reference.position.y)]
+            if let end = reference.endpoint {
+                coordinates += [Double(end.x), Double(end.y)]
+            }
+            return coordinates
+        }
+        return CPSession(id: id, name: name, image: data, paper: paper, targets: targets)
+    }
+
+    private func saveCPDraft() {
+        guard let project = captureCP(id: "draft", name: sourceLabel) else { return }
+        do { try CPSessionStore.save(project) }
+        catch { problem = "Could not save draft: \(error.localizedDescription)" }
+    }
+
+    private func queueCPDraft() {
+        draftSave?.cancel()
+        draftSave = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if !Task.isCancelled { saveCPDraft() }
+        }
+    }
+
+    private func saveNamedCP() {
+        let name = cpProjectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let project = captureCP(id: UUID().uuidString,
+                                      name: name.isEmpty ? "Crease pattern" : name) else { return }
+        do {
+            try CPSessionStore.save(project)
+            cpSaved = CPSessionStore.all()
+            saveCPDraft()
+        } catch {
+            problem = "Could not save project: \(error.localizedDescription)"
+        }
+    }
+
     private func pasteImage() {
         if let pasted = UIPasteboard.general.image {
             reset(with: pasted, name: "Clipboard image")
