@@ -1246,7 +1246,11 @@ private struct CPPointsResultsView: View {
                                               count: max(1, min(4, columns))),
                               alignment: .leading, spacing: 12) {
                         ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
-                            CPPointResultCard(index: index + 1, point: point, rank: rank)
+                            CPPointResultCard(index: index + 1,
+                                              number: points.prefix(index + 1).filter {
+                                                  ($0.endpoint != nil) == (point.endpoint != nil)
+                                              }.count,
+                                              point: point, rank: rank)
                         }
                     }
                 }
@@ -1262,6 +1266,7 @@ private struct CPPointsResultsView: View {
 
 private struct CPPointResultCard: View {
     let index: Int
+    let number: Int
     let point: CPReference
     let rank: Int
     @StateObject private var model = SearchModel()
@@ -1272,10 +1277,10 @@ private struct CPPointResultCard: View {
             HStack(spacing: 6) {
                 if point.endpoint != nil {
                     Circle()
-                        .fill(Color(uiColor: CPReferencePalette.lineColor(index)).opacity(0.75))
+                        .fill(Color(uiColor: CPReferencePalette.lineColor(number)).opacity(0.75))
                         .frame(width: 10, height: 10)
                 }
-                Text("\(point.endpoint == nil ? "POINT" : "LINE") \(index)")
+                Text("\(point.endpoint == nil ? "POINT" : "LINE") \(number)")
                     .font(.headline).foregroundStyle(ink)
             }
             Text(String(format: "X %.5f\nY %.5f", point.position.x, 1 - point.position.y))
