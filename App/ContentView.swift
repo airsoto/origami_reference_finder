@@ -1155,30 +1155,56 @@ private final class CPAnnotatedPaperView: UIView {
             context.setFillColor(UIColor.systemOrange.cgColor)
             context.fillEllipse(in: CGRect(x: handle.x - 6, y: handle.y - 6, width: 12, height: 12))
         }
-        for (number, point, endpoint) in references {
-            if let endpoint {
-                let ex = (region.minX + endpoint.x * region.width) * bounds.width
-                let ey = (region.minY + endpoint.y * region.height) * bounds.height
-                context.setStrokeColor(UIColor.systemPurple.cgColor)
-                context.setLineWidth(2.5)
-                context.move(to: CGPoint(x: (region.minX + point.x * region.width) * bounds.width, y: (region.minY + point.y * region.height) * bounds.height))
-                context.addLine(to: CGPoint(x: ex, y: ey))
-                context.strokePath()
-                context.setFillColor(UIColor.systemPurple.cgColor)
-                context.fillEllipse(in: CGRect(x: ex - 7, y: ey - 7, width: 14, height: 14))
-            }
+        var pointIndex = 0
+        var lineIndex = 0
+        for (_, point, endpoint) in references {
             let x = (region.minX + point.x * region.width) * bounds.width
             let y = (region.minY + point.y * region.height) * bounds.height
-            let marker = CGRect(x: x - 12, y: y - 12, width: 24, height: 24)
-            context.setFillColor(UIColor(red: 0.03, green: 0.43, blue: 0.48, alpha: 1).cgColor)
-            context.fillEllipse(in: marker)
-            context.setStrokeColor(UIColor.white.cgColor)
-            context.setLineWidth(2)
-            context.strokeEllipse(in: marker)
-            let text = "\(number)" as NSString
-            let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 13), .foregroundColor: UIColor.white]
-            let textSize = text.size(withAttributes: attrs)
-            text.draw(at: CGPoint(x: x - textSize.width / 2, y: y - textSize.height / 2), withAttributes: attrs)
+            let label: String
+            let center: CGPoint
+            let fill: UIColor
+
+            if let endpoint {
+                lineIndex += 1
+                label = "L\(lineIndex)"
+                let ex = (region.minX + endpoint.x * region.width) * bounds.width
+                let ey = (region.minY + endpoint.y * region.height) * bounds.height
+                center = CGPoint(x: (x + ex) / 2, y: (y + ey) / 2)
+                let color = CPReferencePalette.lineColor(lineIndex)
+                fill = color.withAlphaComponent(0.70)
+                context.setStrokeColor(color.withAlphaComponent(0.64).cgColor)
+                context.setLineWidth(2.2)
+                context.move(to: CGPoint(x: x, y: y))
+                context.addLine(to: CGPoint(x: ex, y: ey))
+                context.strokePath()
+                // Small semi-transparent endpoint handles.
+                context.setFillColor(color.withAlphaComponent(0.52).cgColor)
+                for p in [CGPoint(x: x, y: y), CGPoint(x: ex, y: ey)] {
+                    context.fillEllipse(in: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
+                }
+            } else {
+                pointIndex += 1
+                label = "\(pointIndex)"
+                center = CGPoint(x: x, y: y)
+                fill = UIColor(red: 0.03, green: 0.43, blue: 0.48, alpha: 0.58)
+            }
+            // Compact semi-transparent labels preserve the image beneath.
+            let diameter: CGFloat = endpoint == nil ? 18 : 21
+            let badge = CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2,
+                               width: diameter, height: diameter)
+            context.setFillColor(fill.cgColor)
+            context.fillEllipse(in: badge)
+            context.setStrokeColor(UIColor.white.withAlphaComponent(0.65).cgColor)
+            context.setLineWidth(0.8)
+            context.strokeEllipse(in: badge)
+            let text = label as NSString
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: endpoint == nil ? 10 : 9),
+                .foregroundColor: UIColor.white
+            ]
+            let size = text.size(withAttributes: attrs)
+            text.draw(at: CGPoint(x: center.x - size.width / 2, y: center.y - size.height / 2),
+                      withAttributes: attrs)
         }
     }
 }
