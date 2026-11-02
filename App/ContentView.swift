@@ -596,6 +596,40 @@ private enum CPReferencePalette {
     }
 }
 
+private struct CPSession: Codable, Identifiable {
+    let id: String
+    var name: String
+    let image: Data
+    let paper: [Double]?
+    let targets: [[Double]]
+}
+
+private enum CPSessionStore {
+    static func directory() throws -> URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let folder = root.appendingPathComponent("SavedCPs", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+    static func save(_ session: CPSession) throws {
+        try JSONEncoder().encode(session).write(
+            to: directory().appendingPathComponent(session.id + ".json"), options: .atomic)
+    }
+    static func load(_ id: String) -> CPSession? {
+        guard let url = try? directory().appendingPathComponent(id + ".json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(CPSession.self, from: data)
+    }
+    static func all() -> [CPSession] {
+        guard let folder = try? directory(),
+              let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        else { return [] }
+        return urls.filter { $0.pathExtension == "json" && $0.lastPathComponent != "draft.json" }
+            .compactMap { try? JSONDecoder().decode(CPSession.self, from: Data(contentsOf: $0)) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+}
+
 private struct CPReference: Identifiable {
     let id = UUID()
     var position: CGPoint // normalized top-left-origin paper coordinates
