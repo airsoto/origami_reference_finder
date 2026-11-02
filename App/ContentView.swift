@@ -1639,22 +1639,12 @@ private struct CPPointResultCard: View {
                             }
                         }
                     } label: {
-                        Label(selectedRoute.flatMap { solutions.indices.contains($0) ? "PDF: Route \($0 + 1)" : nil } ?? "PDF: Auto (best route)",
-                              systemImage: "doc.text")
+                        Label(selectedRoute.flatMap { solutions.indices.contains($0) ? "Selected: Route \($0 + 1)" : nil } ?? "Select route · Auto (best)",
+                              systemImage: "checkmark.circle")
                             .font(.caption.weight(.semibold))
                     }
                 }
                 ForEach(Array(solutions.enumerated()), id: \.offset) { route, solution in
-                    HStack(spacing: 6) {
-                        Button {
-                            selectedRoute = route
-                        } label: {
-                            Label(selectedRoute == route ? "Selected" : "Use in PDF",
-                                  systemImage: selectedRoute == route ? "checkmark.circle.fill" : "circle")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.bordered)
-                    }
                     NavigationLink {
                         SolutionView(solution: solution, number: route + 1,
                                      input: model.lastInput ?? model.input)
