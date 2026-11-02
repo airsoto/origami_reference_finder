@@ -695,11 +695,13 @@ private struct CPPointsView: View {
                                         Text(action.rawValue).tag(action)
                                     }
                                 }.pickerStyle(.segmented)
-                                Text(editingPoint != nil ? (editingEndpoint == 2 ? "Tap the new center of the line." : "Tap a new position for the selected handle.") :
-                                     referenceKind == .line ? (pendingLineStart == nil ?
-                                     "Tap the first line endpoint, then the second." :
-                                     "Tap the second endpoint to complete the line.") :
-                                     (placementMode == .add ? "Tap the paper to add a point." : "Drag a point to move it, or tap it and select a new position."))
+                                Text(editingPoint != nil ?
+                                     "Tap a new destination or press and drag the selected marker." :
+                                     placementMode == .edit ?
+                                     "Press and drag an existing marker, or tap it and then tap its destination." :
+                                     referenceKind == .line ?
+                                     (pendingLineStart == nil ? "Tap the start of the line." : "Tap its second endpoint.") :
+                                     "Tap inside the square to insert a point.")
                                     .font(.caption).foregroundStyle(.secondary)
                                 if pendingLineStart != nil {
                                     Button("Cancel unfinished line") { pendingLineStart = nil }
@@ -944,7 +946,7 @@ private struct CPPointsView: View {
             if let closest = handles.min(by: { lhs, rhs in
                 hypot(lhs.2.x - normalized.x, lhs.2.y - normalized.y) <
                 hypot(rhs.2.x - normalized.x, rhs.2.y - normalized.y)
-            }), hypot(closest.2.x - normalized.x, closest.2.y - normalized.y) < 0.035 {
+            }), hypot(closest.2.x - normalized.x, closest.2.y - normalized.y) < 0.05 {
                 editingPoint = closest.0
                 editingEndpoint = closest.1
             } else if let index = references.indices.first(where: { i in
