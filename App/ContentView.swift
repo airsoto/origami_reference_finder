@@ -978,6 +978,43 @@ private struct CPPointsView: View {
         }
     }
 
+    private func handleDrag(_ p: CGPoint, _ phase: CPDragPhase) {
+        guard mode == .points, placementMode == .edit, let region = paperRegion else { return }
+        let n = CGPoint(x: (p.x - region.minX) / region.width,
+                        y: (p.y - region.minY) / region.height)
+        switch phase {
+        case .began:
+            let choices = references.indices.flatMap { i -> [(Int, Int, CGPoint)] in
+                var parts = [(i, 0, references[i].position)]
+                if let end = references[i].endpoint { parts.append((i, 1, end)) }
+                return parts
+            }
+            if let nearest = choices.min(by: {
+                hypot($0.2.x - n.x, $0.2.y - n.y) < hypot($1.2.x - n.x, $1.2.y - n.y)
+            }), hypot(nearest.2.x - n.x, nearest.2.y - n.y) < 0.07 {
+                editingPoint = nearest.0
+                editingEndpoint = nearest.1
+            } else {
+                editingPoint = nil
+            }
+        case .changed:
+            guard let i = editingPoint, references.indices.contains(i) else { return }
+            let value = CGPoint(x: min(1, max(0, n.x)), y: min(1, max(0, n.y)))
+            if editingEndpoint == 1 {
+                let start = references[i].position
+                if hypot(start.x - value.x, start.y - value.y) > 0.0001 {
+                    references[i].endpoint = value
+                }
+            } else {
+                if let end = references[i].endpoint, hypot(end.x - value.x, end.y - value.y) <= 0.0001 { return }
+                references[i].position = value
+            }
+        case .ended:
+            editingPoint = nil
+            editingEndpoint = nil
+        }
+    }
+
     private func pasteImage() {
         if let pasted = UIPasteboard.general.image {
             reset(with: pasted, name: "Clipboard image")
@@ -1058,6 +1095,8 @@ private struct CPPointsView: View {
     }
 }
 
+private enum CPDragPhase { case began, changed, ended }
+
 private struct CPSelectionCanvas: UIViewRepresentable {
     let image: UIImage
     let region: CGRect?
@@ -1065,8 +1104,9 @@ private struct CPSelectionCanvas: UIViewRepresentable {
     let references: [CPReference]
     let mode: CPPointsView.CPMode
     let onTouch: (CGPoint) -> Void
+    let onDrag: (CGPoint, CPDragPhase) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onTouch: onTouch) }
+    func makeCoordinator() -> Coordinator { Coordinator(onTouch: onTouch, onDrag: onDrag) }
 
     func makeUIView(context: Context) -> CPZoomScrollView {
         let scroll = CPZoomScrollView()
@@ -1077,12 +1117,18 @@ private struct CPSelectionCanvas: UIViewRepresentable {
         scroll.contentInsetAdjustmentBehavior = .never
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.didTap(_:)))
         scroll.paperView.addGestureRecognizer(tap)
+        let drag = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.didDrag(_:)))
+        drag.minimumPressDuration = 0.20
+        drag.allowableMovement = 20
+        scroll.paperView.addGestureRecognizer(drag)
+        tap.require(toFail: drag)
         scroll.paperView.isUserInteractionEnabled = true
         return scroll
     }
 
     func updateUIView(_ scroll: CPZoomScrollView, context: Context) {
         context.coordinator.onTouch = onTouch
+        context.coordinator.onDrag = onDrag
         scroll.setImageIfNeeded(image)
         scroll.paperView.region = region
         scroll.paperView.corner = corner
@@ -1092,7 +1138,22 @@ private struct CPSelectionCanvas: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
         var onTouch: (CGPoint) -> Void
-        init(onTouch: @escaping (CGPoint) -> Void) { self.onTouch = onTouch }
+        var onDrag: (CGPoint, CPDragPhase) -> Void
+        init(onTouch: @escaping (CGPoint) -> Void, onDrag: @escaping (CGPoint, CPDragPhase) -> Void) {
+            self.onTouch = onTouch
+            self.onDrag = onDrag
+        }
+        @objc func didDrag(_ gesture: UILongPressGestureRecognizer) {
+            guard let paper = gesture.view, paper.bounds.width > 0, paper.bounds.height > 0 else { return }
+            let position = gesture.location(in: paper)
+            let normalized = CGPoint(x: position.x / paper.bounds.width, y: position.y / paper.bounds.height)
+            switch gesture.state {
+            case .began: onDrag(normalized, .began)
+            case .changed: onDrag(normalized, .changed)
+            case .ended, .cancelled, .failed: onDrag(normalized, .ended)
+            default: break
+            }
+        }
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             (scrollView as? CPZoomScrollView)?.paperView
         }
