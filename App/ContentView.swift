@@ -884,6 +884,20 @@ private struct CPPointsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { DoneButton { dismiss() } }
             }
+            .alert("Save CP", isPresented: $askToSave) {
+                TextField("Project name", text: $cpProjectName)
+                Button("Save") { saveNamedCP() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Save the image, paper square, points and lines on this iPhone.")
+            }
+            .onAppear {
+                cpSaved = CPSessionStore.all()
+                if image == nil { loadSession(CPSessionStore.load("draft")) }
+            }
+            .onDisappear { draftSave?.cancel(); saveCPDraft() }
+            .onChange(of: references.count) { _ in queueCPDraft() }
+            .onChange(of: paperRegion) { _ in queueCPDraft() }
             .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.image, .pdf]) { result in
                 switch result {
                 case .success(let file):
