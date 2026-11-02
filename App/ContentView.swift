@@ -1478,6 +1478,7 @@ private struct CPPointsResultsView: View {
     @State private var exportURL: URL?
     @State private var exportBusy = false
     @State private var exportError: String?
+    @State private var showingPDF = false
     @State private var selectedRoutes: [UUID: Int] = [:]
     @AppStorage("origami.cp.columns") private var columns = 1
     @MainActor
@@ -1515,6 +1516,7 @@ private struct CPPointsResultsView: View {
             exportURL = try await CPPDFExporter.create(image: image, region: region,
                                                        references: points, solutions: all,
                                                        chosenRoutes: points.map { selectedRoutes[$0.id] }, title: title)
+            showingPDF = true
         } catch {
             exportError = "Could not export PDF: \(error.localizedDescription)"
         }
@@ -1541,13 +1543,15 @@ private struct CPPointsResultsView: View {
                     }
                     HStack {
                         Button { Task { await exportToPDF() } } label: {
-                            Label(exportBusy ? "Preparing PDF…" : "Export PDF", systemImage: "doc.richtext")
+                            Label(exportBusy ? "Preparing PDF…" : "View PDF", systemImage: "doc.text.magnifyingglass")
                         }
                         .disabled(exportBusy || image == nil || region == nil || points.isEmpty)
                         if exportBusy { ProgressView() }
-                        if let exportURL {
-                            ShareLink(item: exportURL) {
-                                Label("Share / Save PDF", systemImage: "square.and.arrow.up")
+                        if exportURL != nil {
+                            Button {
+                                showingPDF = true
+                            } label: {
+                                Label("Open PDF", systemImage: "eye")
                             }
                         }
                     }.buttonStyle(.borderedProminent)
@@ -1575,6 +1579,9 @@ private struct CPPointsResultsView: View {
         }
         .navigationTitle("CP folding routes")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingPDF) {
+            if let exportURL { CPPDFPreviewView(url: exportURL) }
+        }
     }
 }
 
@@ -1638,6 +1645,16 @@ private struct CPPointResultCard: View {
                     }
                 }
                 ForEach(Array(solutions.enumerated()), id: \.offset) { route, solution in
+                    HStack(spacing: 6) {
+                        Button {
+                            selectedRoute = route
+                        } label: {
+                            Label(selectedRoute == route ? "Selected" : "Use in PDF",
+                                  systemImage: selectedRoute == route ? "checkmark.circle.fill" : "circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     NavigationLink {
                         SolutionView(solution: solution, number: route + 1,
                                      input: model.lastInput ?? model.input)
