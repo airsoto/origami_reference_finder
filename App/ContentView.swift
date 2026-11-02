@@ -1182,24 +1182,43 @@ private struct CPPointsView: View {
             }), hypot(nearest.2.x - n.x, nearest.2.y - n.y) < 0.07 {
                 editingPoint = nearest.0
                 editingEndpoint = nearest.1
+                dragStartLocation = nearest.2
+                dragMoved = false
             } else {
                 editingPoint = nil
+                dragStartLocation = nil
             }
         case .changed:
             guard let i = editingPoint, references.indices.contains(i) else { return }
             let value = CGPoint(x: min(1, max(0, n.x)), y: min(1, max(0, n.y)))
+            if let origin = dragStartLocation,
+               hypot(origin.x - value.x, origin.y - value.y) > 0.002 {
+                dragMoved = true
+            }
             if editingEndpoint == 1 {
                 let start = references[i].position
                 if hypot(start.x - value.x, start.y - value.y) > 0.0001 {
-                    references[i].endpoint = value
+                    updateConnectedEndpoint(line: i, end: 1, to: value)
                 }
             } else {
-                if let end = references[i].endpoint, hypot(end.x - value.x, end.y - value.y) <= 0.0001 { return }
-                references[i].position = value
+                if let end = references[i].endpoint,
+                   hypot(end.x - value.x, end.y - value.y) <= 0.0001 { return }
+                if references[i].endpoint != nil {
+                    updateConnectedEndpoint(line: i, end: 0, to: value)
+                } else {
+                    references[i].position = value
+                }
             }
         case .ended:
+            if let i = editingPoint, let end = editingEndpoint,
+               end < 2, dragMoved, references.indices.contains(i),
+               references[i].endpoint != nil {
+                offerEndpointJoin(for: i, end: end)
+            }
             editingPoint = nil
             editingEndpoint = nil
+            dragStartLocation = nil
+            dragMoved = false
         }
     }
 
