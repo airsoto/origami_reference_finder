@@ -1,6 +1,8 @@
 import Foundation
 import UIKit
 import WebKit
+import SwiftUI
+import PDFKit
 
 // CP-only PDF export. No external services are required; SVG diagrams are
 // rendered by a local WKWebView with JavaScript disabled.
@@ -70,8 +72,17 @@ enum CPPDFExporter {
                             PlacedHeading(title: "\(label)  ·  ROUTE \(routeIndex + 1) (continued)", y: y))
                         y += 31
                     }
-                    guard let diagram = await converter.render(step.svg) else {
+                    guard let originalDiagram = await converter.render(step.svg) else {
                         throw ExportError.invalidDiagram
+                    }
+                    // Highlight the target segment only on the LAST step of a line.
+                    // This overlay does not alter the actual construction diagrams.
+                    let diagram: UIImage
+                    if stepIndex == route.steps.count - 1, let end = reference.endpoint {
+                        diagram = highlightSegment(on: originalDiagram,
+                                                  from: reference.position, to: end)
+                    } else {
+                        diagram = originalDiagram
                     }
                     let x = margin + CGFloat(column) * (tile + gap)
                     pages[pages.count - 1].diagrams.append(
@@ -137,6 +148,41 @@ enum CPPDFExporter {
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try data.write(to: destination, options: .atomic)
         return destination
+    }
+
+    // The engine's SVG is a square sheet (0...1) viewed through the
+    // viewBox (-0.12, -0.12, 1.24, 1.24). CP coordinates have a top-left origin.
+    // Draw exactly the finite endpoint-to-endpoint target segment, never the
+    // infinitely extended construction line.
+    private static func highlightSegment(on original: UIImage,
+                                         from start: CGPoint, to end: CGPoint) -> UIImage {
+        let canvasSize = original.size
+        let scale = min(canvasSize.width, canvasSize.height)
+        guard scale > 0 else { return original }
+        let factor: CGFloat = 1.24
+        func project(_ point: CGPoint) -> CGPoint {
+            CGPoint(x: (point.x + 0.12) / factor * canvasSize.width,
+                    y: (point.y + 0.12) / factor * canvasSize.height)
+        }
+        let a = project(start)
+        let b = project(end)
+        let renderer = UIGraphicsImageRenderer(size: canvasSize)
+        return renderer.image { _ in
+            original.draw(in: CGRect(origin: .zero, size: canvasSize))
+            let path = UIBezierPath()
+            path.move(to: a)
+            path.addLine(to: b)
+            path.lineWidth = max(2, scale * 0.007)
+            path.lineCapStyle = .round
+            UIColor.systemPurple.withAlphaComponent(0.9).setStroke()
+            path.stroke()
+            for marker in [a, b] {
+                let radius = max(3, scale * 0.010)
+                UIColor.systemPurple.setFill()
+                UIBezierPath(ovalIn: CGRect(x: marker.x - radius, y: marker.y - radius,
+                                            width: radius * 2, height: radius * 2)).fill()
+            }
+        }
     }
 
     private static func drawText(_ string: String, at point: CGPoint, font: UIFont,
@@ -255,5 +301,50 @@ private final class CPDiagramSnapshotter: NSObject, WKNavigationDelegate {
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         pending?.resume(returning: nil); pending = nil; web = nil
+    }
+}
+
+
+struct CPPDFPreviewView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            CPPDFKitView(url: url)
+                .background(Color(uiColor: .systemGroupedBackground))
+                .navigationTitle("CP PDF preview")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Done") { dismiss() }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        ShareLink(item: url) {
+                            Label("Share / Save", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
+        }
+    }
+}
+
+private struct CPPDFKitView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayDirection = .vertical
+        view.displayMode = .singlePageContinuous
+        view.backgroundColor = .systemGroupedBackground
+        return view
+    }
+
+    func updateUIView(_ view: PDFView, context: Context) {
+        if view.document?.documentURL != url {
+            view.document = PDFDocument(url: url)
+            view.autoScales = true
+        }
     }
 }
