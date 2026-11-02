@@ -62,7 +62,13 @@ struct ContentView: View {
                                 Text("Balanced").tag(3)
                                 Text("Deeper").tag(4)
                             }.pickerStyle(.segmented)
-                            Text("Balanced is faster to start. Deeper explores more constructions. Rank measures construction complexity, not the number of diagrams.")
+                            Picker("Reference library limit", selection: $model.input.maxReferences) {
+                                Text("100K").tag(Optional(100000))
+                                Text("250K").tag(Optional(250000))
+                                Text("500K").tag(Optional(500000))
+                            }.pickerStyle(.segmented)
+                            Text("Larger libraries may improve precision, but take longer to build and use considerably more memory. Depth controls construction complexity.")
+                                .font(.caption).foregroundStyle(.secondary)
                                 .font(.caption).foregroundStyle(.secondary)
                     }.card().disabled(model.isSearching)
                     if model.isSearching {
@@ -610,6 +616,7 @@ private struct CPPointsView: View {
     @State private var problem: String?
     @State private var showRoutes = false
     @State private var searchRank = 3
+    @State private var cpLibrarySize = 100000
     @State private var editingCorner: Int?
     @State private var editingPoint: Int?
     @State private var referenceKind: CPReferenceKind = .point
@@ -793,6 +800,11 @@ private struct CPPointsView: View {
                                         references.removeAll(); pendingLineStart = nil
                                     }.disabled(references.isEmpty && pendingLineStart == nil)
                                 }.buttonStyle(.bordered)
+                                Picker("Library size", selection: $cpLibrarySize) {
+                                    Text("100K").tag(100000)
+                                    Text("250K").tag(250000)
+                                    Text("500K").tag(500000)
+                                }.pickerStyle(.segmented)
                                 Picker("Search depth", selection: $searchRank) {
                                     Text("Quick").tag(2)
                                     Text("Balanced").tag(3)
@@ -833,7 +845,7 @@ private struct CPPointsView: View {
                 }
             }
             .navigationDestination(isPresented: $showRoutes) {
-                CPPointsResultsView(points: references, rank: searchRank)
+                CPPointsResultsView(points: references, rank: searchRank, maxReferences: cpLibrarySize)
             }
         }
     }
@@ -1318,6 +1330,7 @@ private final class CPAnnotatedPaperView: UIView {
 private struct CPPointsResultsView: View {
     let points: [CPReference]
     let rank: Int
+    let maxReferences: Int
     @AppStorage("origami.cp.columns") private var columns = 1
     var body: some View {
         GeometryReader { geometry in
@@ -1347,7 +1360,7 @@ private struct CPPointsResultsView: View {
                                               number: points.prefix(index + 1).filter {
                                                   ($0.endpoint != nil) == (point.endpoint != nil)
                                               }.count,
-                                              point: point, rank: rank)
+                                              point: point, rank: rank, maxReferences: maxReferences)
                         }
                     }
                 }
@@ -1366,6 +1379,7 @@ private struct CPPointResultCard: View {
     let number: Int
     let point: CPReference
     let rank: Int
+    let maxReferences: Int
     @StateObject private var model = SearchModel()
     @State private var started = false
 
@@ -1428,7 +1442,7 @@ private struct CPPointResultCard: View {
                 x2: String(format: "%.10f", point.endpoint?.x ?? 1),
                 y2: String(format: "%.10f", 1 - (point.endpoint?.y ?? (2.0 / 3.0))),
                 width: "1", height: "1",
-                line: point.endpoint != nil, rank: rank)
+                line: point.endpoint != nil, rank: rank, maxReferences: maxReferences)
             model.search()
         }
     }
