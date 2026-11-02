@@ -47,6 +47,7 @@ enum CPPDFExporter {
         var pointNumber = 0
         var lineNumber = 0
         var completedLines: [(CGPoint, CGPoint)] = []
+        var completedPoints: [CGPoint] = []
         for (index, reference) in references.enumerated() {
             if reference.endpoint == nil { pointNumber += 1 } else { lineNumber += 1 }
             let label = reference.endpoint == nil ? "POINT \(pointNumber)" : "LINE \(lineNumber)"
@@ -116,11 +117,14 @@ enum CPPDFExporter {
             // A failed/unavailable route is not falsely marked as completed.
             if let end = reference.endpoint {
                 completedLines.append((reference.position, end))
+            } else {
+                completedPoints.append(reference.position)
             }
         }
 
         let original = image
         let annotated = annotatedCP(image: image, region: region, references: references)
+        let finalConstructed = finalGrayReferences(lines: completedLines, points: completedPoints)
         let pdf = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: width, height: height))
         let data = pdf.pdfData { context in
             for index in pages.indices {
@@ -164,7 +168,7 @@ enum CPPDFExporter {
                 drawText("Developed for iOS by Ángel Soto",
                          at: CGPoint(x: margin, y: footerY + 8), font: .systemFont(ofSize: 8),
                          color: .darkGray)
-                drawText("Page \(index + 1) of \(pages.count)",
+                drawText("Page \(index + 1) of \(pages.count + 1)",
                          at: CGPoint(x: width - margin - 80, y: footerY),
                          font: .systemFont(ofSize: 8), color: .darkGray)
             }
